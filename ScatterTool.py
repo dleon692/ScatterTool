@@ -48,16 +48,3 @@ def scatter_along_spline(source_obj, spline_obj, count=20,
         inst.scale = rt.point3(s, s, s)
 
     print(f"✅ Se distribuyeron {count} instancias sobre la spline.")
-
-
-# ================================
-# EJECUCIÓN DEL SCRIPT
-# ================================
-
-sel = rt.selection
-if len(sel) == 2:
-    scatter_along_spline(sel[1], sel[0], count=25,
-                         pos_jitter=rt.Point3(5, 5, 0),
-                         rot_range=(0, 180),
-                         scale_range=(0.9, 1.2),
-                         align_to_path=True)
