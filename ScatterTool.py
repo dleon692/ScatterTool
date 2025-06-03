@@ -16,7 +16,7 @@ def scatter_along_spline_distance(source_obj, spline_obj,
         return
 
     shape = spline_obj
-    spline_index = 1  # first spline
+    spline_index = 1
     curve_length = rt.execute(f"curveLength ${shape.name}")
 
     if curve_length == 0:
@@ -31,32 +31,42 @@ def scatter_along_spline_distance(source_obj, spline_obj,
         instance_count = int(curve_length // distance) + 1
 
     param_range = instance_count if is_closed else instance_count - 1
-    
-    instances = []
 
     for i in range(instance_count):
         param = i / float(param_range)
-        pos = rt.pathInterp(spline_obj, 1, param)
+        pos = rt.pathInterp(shape, spline_index, param)
+        tangent = rt.normalize(rt.pathTangent(shape, spline_index, param))
 
-        # Solo añade jitter si pos_jitter es distinto de cero
-        jitter_x = random.uniform(-pos_jitter.x, pos_jitter.x) if pos_jitter.x != 0 else 0
-        jitter_y = random.uniform(-pos_jitter.y, pos_jitter.y) if pos_jitter.y != 0 else 0
+        # Add jitter
+        jitter_x = random.uniform(-pos_jitter.x, pos_jitter.x)
+        jitter_y = random.uniform(-pos_jitter.y, pos_jitter.y)
         jitter = rt.point3(jitter_x, jitter_y, 0)
         final_pos = pos + jitter
 
-        inst = rt.instance(source_obj)
-        inst.position = final_pos
+        # Build local coordinate system
+        x_axis = tangent
+        z_axis = rt.point3(0, 0, 1)
+        y_axis = rt.normalize(rt.cross(z_axis, x_axis))
+        z_axis = rt.normalize(rt.cross(x_axis, y_axis))
+        base_tm = rt.matrix3(x_axis, y_axis, z_axis, final_pos)
 
+        # Create instance and assign transform
+        inst = rt.instance(source_obj)
+        inst.transform = base_tm
+
+        # Apply uniform scale
         s = random.uniform(*scale_range)
         inst.scale = rt.point3(s, s, s)
 
-        instances.append(inst)
-        for inst in instances:
-            rot_x_angle = random.uniform(0, 360) if rot_x else 0
-            rot_y_angle = random.uniform(0, 360) if rot_y else 0
-            rot_z_angle = random.uniform(0, 360) if rot_z else 0
-
-            euler_rot = rt.eulerAngles(rot_x_angle, rot_y_angle, rot_z_angle)
-            inst.rotation = rt.quat(euler_rot)
+        # Apply local rotations conditionally
+        if rot_x:
+            angle_x = random.uniform(0, 360)
+            rt.rotate(inst, rt.eulerAngles(angle_x, 0, 0))
+        if rot_y:
+            angle_y = random.uniform(0, 360)
+            rt.rotate(inst, rt.eulerAngles(0, angle_y, 0))
+        if rot_z:
+            angle_z = random.uniform(0, 360)
+            rt.rotate(inst, rt.eulerAngles(0, 0, angle_z))
 
     print(f"✅ {instance_count} instances of '{source_obj.name}' were created along the spline.")
