@@ -3,14 +3,92 @@ import random
 
 rt = pymxs.runtime
 
-def scatter_along_spline_distance(source_obj, spline_obj,
-                                  distance=20.0,
-                                  count=None,
-                                  pos_jitter=rt.point3(5, 5, 0),
-                                  scale_range=(0.8, 1.2),
-                                  rot_x=False,
-                                  rot_y=False,
-                                  rot_z=True):
+from pymxs import runtime as rt
+import random
+
+#show instance as box
+created_instances = []
+def set_display_as_box(enable=True):
+    for obj in created_instances:
+        if rt.isValidNode(obj): 
+            obj.displayAsBox = enable
+class ElementsManager:
+
+    def __init__(self):
+        self.elements = []
+
+    def add(self, obj):
+        """add an object to the list if it's not already there."""
+        if obj and obj not in self.elements:
+            self.elements.append(obj)
+            print(f"[Added] {obj.name}")
+
+    def add_many(self, objs):
+        """add multiple objects to the list."""
+        for obj in objs:
+            self.add(obj)
+
+    def pick(self):
+        """Pick an object from the scene and add it to the list."""
+        try:
+            picked = rt.pickObject()
+            if picked:
+                self.add(picked)
+        except Exception as e:
+            print(f"[Error picking] {e}")
+
+    def remove(self, obj):
+        """Remove an object from the list."""
+        if obj in self.elements:
+            self.elements.remove(obj)
+            print(f"[Removed] {obj.name}")
+
+    def replace(self, old_obj, new_obj):
+        """Replace an object in the list with another."""
+        if old_obj in self.elements and new_obj:
+            idx = self.elements.index(old_obj)
+            self.elements[idx] = new_obj
+            print(f"[Replaced] {old_obj.name} → {new_obj.name}")
+
+    def clear(self):
+        """Clear the entire list."""
+        self.elements.clear()
+        print("[Cleared] All elements removed.")
+
+    def get_random(self):
+        """returns a random element from the list."""
+        return random.choice(self.elements) if self.elements else None
+
+    def get_all(self):
+        """returns all elements in the list."""
+        return self.elements
+
+    def __repr__(self):
+        return f"ElementsManager({[obj.name for obj in self.elements]})"
+
+def apply_random_scale_and_rotation(inst,scale_rangeX,scale_rangeY,scale_rangeZ,angle_x,angle_y,angle_z):
+       # Apply scale
+        sx = random.uniform(*scale_rangeX)
+        sy = random.uniform(*scale_rangeY)
+        sz = random.uniform(*scale_rangeZ)
+        inst.scale = rt.point3(sx, sy, sz)
+        # Apply rotations
+        rt.rotate(inst, rt.eulerAngles(angle_x, 0, 0))
+        rt.rotate(inst, rt.eulerAngles(0, angle_y, 0))
+        rt.rotate(inst, rt.eulerAngles(0, 0, angle_z))
+    
+def scatter_spline(source_obj, spline_obj,
+                                  distance,
+                                  count,
+                                  pos_jitter=rt.point3(0, 0, 0),
+                                  scale_rangeX=(1.0, 1.0),
+                                  scale_rangeY=(1.0, 1.0),
+                                  scale_rangeZ=(1.0, 1.0),
+                                  rot_x_range=(0, 0),
+                                  rot_y_range=(0, 0),
+                                  rot_z_range=(0, 0)):
+    global created_instances
+    created_instances.clear()
     if not (rt.isValidNode(source_obj) and rt.isValidNode(spline_obj)):
         print("ERROR: Select a spline first and the mesh second.")
         return
@@ -40,7 +118,8 @@ def scatter_along_spline_distance(source_obj, spline_obj,
         # Add jitter
         jitter_x = random.uniform(-pos_jitter.x, pos_jitter.x)
         jitter_y = random.uniform(-pos_jitter.y, pos_jitter.y)
-        jitter = rt.point3(jitter_x, jitter_y, 0)
+        jitter_z = random.uniform(-pos_jitter.z, pos_jitter.z)
+        jitter = rt.point3(jitter_x, jitter_y, jitter_z)
         final_pos = pos + jitter
 
         # Build local coordinate system
@@ -54,29 +133,29 @@ def scatter_along_spline_distance(source_obj, spline_obj,
         inst = rt.instance(source_obj)
         inst.transform = base_tm
 
-        # Apply uniform scale
-        s = random.uniform(*scale_range)
-        inst.scale = rt.point3(s, s, s)
-
-        # Apply local rotations conditionally
-        if rot_x:
-            angle_x = random.uniform(0, 360)
-            rt.rotate(inst, rt.eulerAngles(angle_x, 0, 0))
-        if rot_y:
-            angle_y = random.uniform(0, 360)
-            rt.rotate(inst, rt.eulerAngles(0, angle_y, 0))
-        if rot_z:
-            angle_z = random.uniform(0, 360)
-            rt.rotate(inst, rt.eulerAngles(0, 0, angle_z))
+        apply_random_scale_and_rotation(
+                        inst,
+                        scale_rangeX,
+                        scale_rangeY,
+                        scale_rangeZ,
+                        random.uniform(*rot_x_range),
+                        random.uniform(*rot_y_range),
+                        random.uniform(*rot_z_range)
+                    )
+        created_instances.append(inst)
 
     print(f"✅ {instance_count} instances of '{source_obj.name}' were created along the spline.")
 
-def scatter_along_surface(source_obj, source_surface,
-                                  count=50,
-                                  scale_range=(0.8, 1.2),
-                                  rot_x=False,
-                                  rot_y=False,
-                                  rot_z=True):
+def scatter_surface(source_obj, source_surface,
+                                  count,
+                                  scale_rangeX=(1.0, 1.0),
+                                  scale_rangeY=(1.0, 1.0),
+                                  scale_rangeZ=(1.0, 1.0),
+                                  rot_x_range=(0, 0),
+                                  rot_y_range=(0, 0),
+                                  rot_z_range=(0, 0)):
+    global created_instances
+    created_instances.clear()
     if not (rt.isValidNode(source_obj) and rt.isValidNode(source_surface)):
         print("ERROR: Select a source object and Editable Poly surface second.")
         return
@@ -136,22 +215,18 @@ def scatter_along_surface(source_obj, source_surface,
                 if inside:
                     inst = rt.instance(source_obj)
                     inst.position = candidate
-                    # Apply uniform scale
-                    s = random.uniform(*scale_range)
-                    inst.scale = rt.point3(s, s, s)
 
-                    # Apply local rotations conditionally
-                    if rot_x:
-                        angle_x = random.uniform(0, 360)
-                        rt.rotate(inst, rt.eulerAngles(angle_x, 0, 0))
-                    if rot_y:
-                        angle_y = random.uniform(0, 360)
-                        rt.rotate(inst, rt.eulerAngles(0, angle_y, 0))
-                    if rot_z:
-                        angle_z = random.uniform(0, 360)
-                        rt.rotate(inst, rt.eulerAngles(0, 0, angle_z))
-                    
+                    apply_random_scale_and_rotation(
+                        inst,
+                        scale_rangeX,
+                        scale_rangeY,
+                        scale_rangeZ,
+                        random.uniform(*rot_x_range),
+                        random.uniform(*rot_y_range),
+                        random.uniform(*rot_z_range)
+                    )                    
                     placed_points.append(candidate)
+                    created_instances.append(inst)
                     created += 1
                     break
             except Exception as e:
@@ -160,3 +235,5 @@ def scatter_along_surface(source_obj, source_surface,
         print(f"surface is too small to create{count},were just created {created} along the surface.")
     elif count==created:
         print(f"{count} instances of '{source_obj.name}' were created along the surface.")
+
+    

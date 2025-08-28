@@ -1,3 +1,13 @@
+# -*- coding: utf-8 -*-
+
+################################################################################
+## Form generated from reading UI file 'scattertool-UIGlZHSk.ui'
+##
+## Created by: Qt User Interface Compiler version 6.9.1
+##
+## WARNING! All changes made in this file will be lost when recompiling UI file!
+################################################################################
+
 from PySide6.QtCore import (QCoreApplication, QDate, QDateTime, QLocale,
     QMetaObject, QObject, QPoint, QRect,
     QSize, QTime, QUrl, Qt)
@@ -15,7 +25,7 @@ class Ui_ScatterToolUI(object):
     def setupUi(self, ScatterToolUI):
         if not ScatterToolUI.objectName():
             ScatterToolUI.setObjectName(u"ScatterToolUI")
-        ScatterToolUI.resize(982, 944)
+        ScatterToolUI.resize(1478, 944)
         self.centralwidget = QWidget(ScatterToolUI)
         self.centralwidget.setObjectName(u"centralwidget")
         self.verticalLayoutWidget_8 = QWidget(self.centralwidget)
@@ -501,10 +511,10 @@ class Ui_ScatterToolUI(object):
 
         self.GeneralVertLayout.addWidget(self.line_Scale)
 
-        self.checkBox_2 = QCheckBox(self.verticalLayoutWidget_8)
-        self.checkBox_2.setObjectName(u"checkBox_2")
+        self.checkBox_proportionalScale = QCheckBox(self.verticalLayoutWidget_8)
+        self.checkBox_proportionalScale.setObjectName(u"checkBox_proportionalScale")
 
-        self.GeneralVertLayout.addWidget(self.checkBox_2)
+        self.GeneralVertLayout.addWidget(self.checkBox_proportionalScale)
 
         self.horizontalLayout_13 = QHBoxLayout()
         self.horizontalLayout_13.setObjectName(u"horizontalLayout_13")
@@ -647,7 +657,7 @@ class Ui_ScatterToolUI(object):
         ScatterToolUI.setCentralWidget(self.centralwidget)
         self.menubar = QMenuBar(ScatterToolUI)
         self.menubar.setObjectName(u"menubar")
-        self.menubar.setGeometry(QRect(0, 0, 982, 33))
+        self.menubar.setGeometry(QRect(0, 0, 1478, 33))
         ScatterToolUI.setMenuBar(self.menubar)
         self.statusbar = QStatusBar(ScatterToolUI)
         self.statusbar.setObjectName(u"statusbar")
@@ -688,7 +698,7 @@ class Ui_ScatterToolUI(object):
         self.label_RosY.setText(QCoreApplication.translate("ScatterToolUI", u"Y", None))
         self.label_RosZ.setText(QCoreApplication.translate("ScatterToolUI", u"Z", None))
         self.label_scale.setText(QCoreApplication.translate("ScatterToolUI", u"Scale", None))
-        self.checkBox_2.setText(QCoreApplication.translate("ScatterToolUI", u"Proportional Scale", None))
+        self.checkBox_proportionalScale.setText(QCoreApplication.translate("ScatterToolUI", u"Proportional Scale", None))
         self.label_EscX.setText(QCoreApplication.translate("ScatterToolUI", u"X", None))
         self.label_EscY.setText(QCoreApplication.translate("ScatterToolUI", u"Y", None))
         self.label_EscZ.setText(QCoreApplication.translate("ScatterToolUI", u"Z", None))
