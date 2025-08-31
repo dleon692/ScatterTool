@@ -8,14 +8,14 @@
 ## WARNING! All changes made in this file will be lost when recompiling UI file!
 ################################################################################
 
-from PySide6.QtCore import (QCoreApplication, QDate, QDateTime, QLocale,
+from PySide2.QtCore import (QCoreApplication, QDate, QDateTime, QLocale,
     QMetaObject, QObject, QPoint, QRect,
     QSize, QTime, QUrl, Qt)
-from PySide6.QtGui import (QBrush, QColor, QConicalGradient, QCursor,
+from PySide2.QtGui import (QBrush, QColor, QConicalGradient, QCursor,
     QFont, QFontDatabase, QGradient, QIcon,
     QImage, QKeySequence, QLinearGradient, QPainter,
     QPalette, QPixmap, QRadialGradient, QTransform)
-from PySide6.QtWidgets import (QAbstractSpinBox, QApplication, QCheckBox, QFrame,
+from PySide2.QtWidgets import (QAbstractSpinBox, QApplication, QCheckBox, QFrame,
     QHBoxLayout, QLabel, QLayout, QListView,
     QMainWindow, QMenuBar, QPushButton, QRadioButton,
     QScrollBar, QSizePolicy, QSpacerItem, QSpinBox,
@@ -25,12 +25,12 @@ class Ui_ScatterToolUI(object):
     def setupUi(self, ScatterToolUI):
         if not ScatterToolUI.objectName():
             ScatterToolUI.setObjectName(u"ScatterToolUI")
-        ScatterToolUI.resize(1478, 944)
+        ScatterToolUI.resize(438, 940)
         self.centralwidget = QWidget(ScatterToolUI)
         self.centralwidget.setObjectName(u"centralwidget")
         self.verticalLayoutWidget_8 = QWidget(self.centralwidget)
         self.verticalLayoutWidget_8.setObjectName(u"verticalLayoutWidget_8")
-        self.verticalLayoutWidget_8.setGeometry(QRect(100, -10, 438, 871))
+        self.verticalLayoutWidget_8.setGeometry(QRect(0, 0, 438, 871))
         self.GeneralVertLayout = QVBoxLayout(self.verticalLayoutWidget_8)
         self.GeneralVertLayout.setSpacing(5)
         self.GeneralVertLayout.setObjectName(u"GeneralVertLayout")

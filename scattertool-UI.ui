@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>1478</width>
-    <height>944</height>
+    <width>438</width>
+    <height>940</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -17,8 +17,8 @@
    <widget class="QWidget" name="verticalLayoutWidget_8">
     <property name="geometry">
      <rect>
-      <x>100</x>
-      <y>-10</y>
+      <x>0</x>
+      <y>0</y>
       <width>438</width>
       <height>871</height>
      </rect>
@@ -1029,7 +1029,7 @@
         </widget>
        </item>
        <item>
-        <widget class="QSpinBox" name="spin_SxMax_2">
+        <widget class="QSpinBox" name="spin_SzMax">
          <property name="contextMenuPolicy">
           <enum>Qt::ContextMenuPolicy::DefaultContextMenu</enum>
          </property>
@@ -1091,7 +1091,7 @@
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>1478</width>
+     <width>438</width>
      <height>33</height>
     </rect>
    </property>
