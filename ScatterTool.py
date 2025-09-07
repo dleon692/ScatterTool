@@ -5,8 +5,7 @@ rt = pymxs.runtime
 from pymxs import runtime as rt
 import random
 
-#show instance as box
-created_instances = []
+#manage source objects list
 
 class ElementsManager:
 
@@ -62,52 +61,105 @@ class ElementsManager:
     def __repr__(self):
         return f"ElementsManager({[obj.name for obj in self.elements]})"
 
-class ScatterTool:
+#manage individual instance transform
+class ScatterInstance:
+    def __init__(self, node):
+        self.node = node
+        self.update_from_node()
 
-    def __init__(self):
-        self.spline=None
-        self.surface=None
+    def update_from_node(self):
+        self.position = self.node.position
+        self.rotation = self.node.rotation
+        self.scale = self.node.scale
+
+    def apply_to_node(self):
+        self.node.position = self.position
+        self.node.rotation = self.rotation
+        self.node.scale = self.scale
+
+#manage scatter group
+class ScatterGroup:
+
+    def __init__(self,name,surface=None,spline=None):
+        self.name = name
+        self.spline=surface
+        self.surface=spline
+        self.instances = []
+        self.controller=None #dummy for future use
+        self.layer=None #layer for the groups
+        self.params = {
+            "count": None,
+            "distance": None,
+            "pos_jitter": rt.point3(0, 0, 0),
+            "scale_rangeX": (1.0, 1.0),
+            "scale_rangeY": (1.0, 1.0),
+            "scale_rangeZ": (1.0, 1.0),
+            "rot_x_range": (0, 0),
+            "rot_y_range": (0, 0),
+            "rot_z_range": (0, 0)
+        }
+        self._setup_group_in_scene()
     
+    #
+    def _setup_group_in_scene(self):
+        # Dummy
+        self.controller = rt.Point(name=f"{self.name}_CTRL")
+        self.controller.size = 10
+        self.controller.box = True
+        self.controller.wirecolor = rt.color(255, 200, 0)
+
+        # Layer
+        self.layer = rt.LayerManager.newLayerFromName(self.name)
+        self.layer.addNode(self.controller)
+        self.layer.isFrozen = True
+
+    def clear_instances(self, delete_nodes=False):
+        if delete_nodes:
+            for inst in self.instances:
+                if rt.isValidNode(inst.node):
+                    rt.delete(inst.node)
+        self.instances.clear()
+
     def set_spline(self, spline):
         self.spline = spline
 
     def set_surface(self, surface):
         self.surface = surface
         
-    created_instances = []
+    #clear instances
+    def clear_instances(self, delete_nodes=False):
+        if delete_nodes:
+            for obj in self.instances:
+                if rt.isValidNode(obj):
+                    rt.delete(obj)
+        self.instances.clear()
+
     #show instance as box
     def set_display_as_box(self,enable=True):
-        for obj in created_instances:
+        for obj in self.instances:
             if rt.isValidNode(obj): 
                 obj.displayAsBox = enable
-    def apply_random_scale_and_rotation(self,inst,scale_rangeX,scale_rangeY,scale_rangeZ,angle_x,angle_y,angle_z):
-        # Apply scale
-            sx = random.uniform(*scale_rangeX)
-            sy = random.uniform(*scale_rangeY)
-            sz = random.uniform(*scale_rangeZ)
+
+    def apply_random_scale_and_rotation(self,inst):
+            # Apply scale
+            sx = random.uniform(*self.params["scale_rangeX"])
+            sy = random.uniform(*self.params["scale_rangeY"])
+            sz = random.uniform(*self.params["scale_rangeZ"])
             inst.scale = rt.point3(sx, sy, sz)
+
+            rx = random.uniform(*self.params["rot_x_range"])
+            ry = random.uniform(*self.params["rot_y_range"])
+            rz = random.uniform(*self.params["rot_z_range"])
             # Apply rotations
-            rt.rotate(inst, rt.eulerAngles(angle_x, 0, 0))
-            rt.rotate(inst, rt.eulerAngles(0, angle_y, 0))
-            rt.rotate(inst, rt.eulerAngles(0, 0, angle_z))
+            rt.rotate(inst, rt.eulerAngles(rx, ry, rz))
     
-    def scatter_spline(self,source_obj, spline_obj,
-                                    distance,
-                                    count,
-                                    pos_jitter=rt.point3(0, 0, 0),
-                                    scale_rangeX=(1.0, 1.0),
-                                    scale_rangeY=(1.0, 1.0),
-                                    scale_rangeZ=(1.0, 1.0),
-                                    rot_x_range=(0, 0),
-                                    rot_y_range=(0, 0),
-                                    rot_z_range=(0, 0)):
-        global created_instances
-        created_instances.clear()
-        if not (rt.isValidNode(source_obj) and rt.isValidNode(spline_obj)):
+    def scatter_spline(self,source_obj):
+        self.clear_instances(delete_nodes=True)
+        if not (rt.isValidNode(source_obj) and rt.isValidNode(self.spline)):
             print("ERROR: Select a spline first and the mesh second.")
             return
 
-        shape = spline_obj
+        shape = self.spline
         spline_index = 1
         curve_length = rt.execute(f"curveLength ${shape.name}")
 
@@ -116,6 +168,9 @@ class ScatterTool:
             return
 
         is_closed = rt.isClosed(shape, spline_index)
+        count = self.params["count"]
+        distance = self.params["distance"]
+
 
         if count is not None:
             instance_count = count
@@ -130,10 +185,11 @@ class ScatterTool:
             tangent = rt.normalize(rt.pathTangent(shape, spline_index, param))
 
             # Add jitter
-            jitter_x = random.uniform(-pos_jitter.x, pos_jitter.x)
-            jitter_y = random.uniform(-pos_jitter.y, pos_jitter.y)
-            jitter_z = random.uniform(-pos_jitter.z, pos_jitter.z)
-            jitter = rt.point3(jitter_x, jitter_y, jitter_z)
+            jitter = rt.point3(
+                random.uniform(-self.params["pos_jitter"].x, self.params["pos_jitter"].x),
+                random.uniform(-self.params["pos_jitter"].y, self.params["pos_jitter"].y),
+                random.uniform(-self.params["pos_jitter"].z, self.params["pos_jitter"].z),
+            )
             final_pos = pos + jitter
 
             # Build local coordinate system
@@ -146,39 +202,27 @@ class ScatterTool:
             # Create instance and assign transform
             inst = rt.instance(source_obj)
             inst.transform = base_tm
+            inst.parent = self.controller
+            self.layer.addNode(inst)
 
-            self.apply_random_scale_and_rotation(
-                        inst,
-                        scale_rangeX,
-                        scale_rangeY,
-                        scale_rangeZ,
-                        random.uniform(*rot_x_range),
-                        random.uniform(*rot_y_range),
-                        random.uniform(*rot_z_range)
-                    )
-            created_instances.append(inst)
+            self.apply_random_scale_and_rotation(inst)
+            self.instances.append(ScatterInstance(inst))
 
         print(f"✅ {instance_count} instances of '{source_obj.name}' were created along the spline.")
 
-    def scatter_surface(self,source_obj, source_surface,
-                                    count,
-                                    scale_rangeX=(1.0, 1.0),
-                                    scale_rangeY=(1.0, 1.0),
-                                    scale_rangeZ=(1.0, 1.0),
-                                    rot_x_range=(0, 0),
-                                    rot_y_range=(0, 0),
-                                    rot_z_range=(0, 0)):
-        global created_instances
-        created_instances.clear()
-        if not (rt.isValidNode(source_obj) and rt.isValidNode(source_surface)):
+    def scatter_surface(self,source_obj):
+        self.clear_instances(delete_nodes=True)
+        
+        if not (rt.isValidNode(source_obj) and rt.isValidNode(self.surface)):
             print("ERROR: Select a source object and Editable Poly surface second.")
             return
-        if not rt.classof(source_surface) == rt.Editable_Poly:
+        if not rt.classof(self.surface) == rt.Editable_Poly:
             print("ERROR: Surface must be an Editable Poly object.")
             return
         
         #determinate bounding box limit(surface)
-        bb_min, bb_max = rt.nodeGetBoundingBox(source_surface, rt.matrix3(1))
+        bb_min, bb_max = rt.nodeGetBoundingBox(self.surface, rt.matrix3(1))
+        
 
         #determinate bounding box limit(object)
 
@@ -188,13 +232,15 @@ class ScatterTool:
 
 
         #Get the mesh to access your faces
-        mesh = rt.snapshotAsMesh(source_surface)
+        mesh = rt.snapshotAsMesh(self.surface)
         face_count = mesh.numfaces
 
-        placed_points = []
+    
         created = 0
         attempts = 0
+        count = self.params["count"]
         max_attempts = count * 10  # To avoid infinite loop if intersections fail
+        placed_points = []
 
         while created < count and attempts < max_attempts:
             attempts += 1
@@ -202,11 +248,11 @@ class ScatterTool:
             # Random point in the Bounding Box
             rand_x = random.uniform(bb_min.x, bb_max.x)
             rand_y = random.uniform(bb_min.y, bb_max.y)
-            rand_z = bb_min.z
+            rand_z = random.uniform(bb_min.z, bb_max.z)
             candidate = rt.point3(rand_x, rand_y, rand_z)
 
             # check if the object is very close to each other
-            if any(rt.length(candidate - p) < separation for p in placed_points):
+            if any(rt.length(candidate - self.params) < separation for self.params in placed_points):
                 continue
 
             for i in range(1, face_count + 1):
@@ -229,25 +275,65 @@ class ScatterTool:
                     if inside:
                         inst = rt.instance(source_obj)
                         inst.position = candidate
+                        inst.parent = self.controller
+                        self.layer.addNode(inst)
 
-                        self.apply_random_scale_and_rotation(
-                            inst,
-                            scale_rangeX,
-                            scale_rangeY,
-                            scale_rangeZ,
-                            random.uniform(*rot_x_range),
-                            random.uniform(*rot_y_range),
-                            random.uniform(*rot_z_range)
-                        )                    
-                        placed_points.append(candidate)
-                        created_instances.append(inst)
+                        self.apply_random_scale_and_rotation(inst)
+                        self.instances.append(ScatterInstance(inst))
                         created += 1
                         break
                 except Exception as e:
-                    print(f"Error on facecara {i}: {e}")
+                    print(f"Error on face {i}: {e}")
         if created<count:
             print(f"surface is too small to create{count},were just created {created} along the surface.")
         elif count==created:
             print(f"{count} instances of '{source_obj.name}' were created along the surface.")
 
+#manage multiple scatter groups
+
+class ScatterTool:
+    def __init__(self):
+        self.groups = []
+
+    def create_group(self, source_obj, target_obj, mode=None):
+        if not (rt.isValidNode(source_obj) and rt.isValidNode(target_obj)):
+            print("ERROR: Scatter group must be valid.")
+            return None
+        
+        #create a new group with unique name
+        group_name = f"Scatter_{len(self.groups)+1:03d}"
+        new_group = ScatterGroup(group_name)
+
+        if mode == "spline":
+            new_group.set_spline(target_obj)
+            new_group.scatter_spline(source_obj)
+        else:
+            new_group.set_surface(target_obj)
+            new_group.scatter_surface(source_obj)
+        
+        self.groups.append(new_group)
+        print(f"✅ Created new group '{group_name}' with mode '{mode}'")
+        return new_group
     
+    def get_group_by_selection(self):
+        
+        sel = rt.selection
+        if not sel:
+            print("ERROR: No objects selected in the scene.")
+            return None
+
+        obj = sel[0]
+
+        for g in self.groups:
+            if rt.isValidNode(g.controller) and g.controller.name == f"{obj.name}_CTRL":
+                return g
+
+        print("No existing group found for selection.")
+        return None
+
+    def get_group(self, name):
+        for g in self.groups:
+            if g.name == name:
+                return g
+        return None
+

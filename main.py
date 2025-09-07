@@ -16,13 +16,17 @@ class ScatterToolApp(QtWidgets.QMainWindow):
         self.ui = Ui_ScatterToolUI()
         self.ui.setupUi(self)
         self.setWindowFlags(QtCore.Qt.WindowStaysOnTopHint)
+
         #create group for mode selection
         self.distribution_group = QButtonGroup(self)
         self.distribution_group.addButton(self.ui.button_spline)
         self.distribution_group.addButton(self.ui.button_surface)
+        self.distribution_group.setExclusive(True)
 
         #create scatter tool instance
         self.scatter_tool = ScatterTool()
+
+        self.current_group = None
 
         #connect mode buttons
         self.ui.button_spline.toggled.connect(self.mode_buttons)
@@ -52,7 +56,8 @@ class ScatterToolApp(QtWidgets.QMainWindow):
 
 
         self.setup_connections()
-    
+
+    # --------------------------- UI & list handling ---------------------------
     def refresh_listview(self):
         self.elements = [obj.name for obj in self.manager.get_all()]
         self.model.setStringList(self.elements)
@@ -64,33 +69,38 @@ class ScatterToolApp(QtWidgets.QMainWindow):
         self.ui.pushButton_delete.clicked.connect(self.on_delete)
         self.ui.pushButton_replace.clicked.connect(self.on_replace)
         self.ui.pushButton_addList.clicked.connect(self.on_add_list)
-        self.ui.button_seed.clicked.connect(self.on_seed_clicked)
+        self.ui.button_shuffle.clicked.connect(self.on_shuffle_clicked)
         self.ui.Button_update.clicked.connect(self.on_update)
     
-    # Handle mode button toggles
+   # --------------------------- Mode buttons ---------------------------
 
     def mode_buttons(self):
         if self.ui.button_spline.isChecked():
             self.ui.button_pickSpline.setEnabled(True)
             self.ui.button_pickSurface.setEnabled(False)
-            self.scatter_tool.set_surface(None)
-        elif self.ui.button_surface.isChecked():
+             
+        else:
+            
             self.ui.button_pickSurface.setEnabled(True)
             self.ui.button_pickSpline.setEnabled(False)
-            self.scatter_tool.set_spline(None)
 
-    # Handle display elements as box or mesh
+     # --------------------------- Box / Mesh View ---------------------------# 
     def on_box_view(self):
-        if self.ui.button_box.isChecked():
-            self.scatter_tool.set_display_as_box(True)
-            self.ui.button_mesh.setChecked(False)
-        else:
-            self.scatter_tool.set_display_as_box(False)
-            self.ui.button_mesh.setChecked(False)
-    
-    # Pick spline or surface from the scene
+        if self.current_group:
+            self.current_group.set_display_as_box(self.ui.button_box.isChecked())
+        self.ui.button_mesh.setChecked(not self.ui.button_box.isChecked())
+
+    # --------------------------- Pick spline / surface ---------------------------
     def on_pick_spline(self):
-        try:
+        selection = rt.selection
+        if selection.count > 0 and rt.isKindOf(selection[0], rt.SplineShape):
+            if self.current_group:
+                self.current_group.set_spline(selection[0])
+            self.ui.button_pickSpline.setText(f"Spline: {selection[0].name}")
+        else:
+            self.ui.button_pickSpline.setText("ERROR: Select a valid Spline.")
+
+        """try:
             # Selecciona un objeto de la escena
             picked = rt.pickObject(prompt="Pick a spline")
             if not picked:
@@ -112,16 +122,19 @@ class ScatterToolApp(QtWidgets.QMainWindow):
 
         except RuntimeError:
             self.ui.button_pickSpline.setText("Pick canceled or invalid object.")
-                
+                """
+
     def on_pick_surface(self):
         selection = rt.selection
         if selection.count > 0 and rt.isKindOf(selection[0], rt.GeometryClass):
-            self.scatter_tool.set_surface(selection[0])
+            if self.current_group:
+                self.current_group.set_surface(selection[0])
             self.ui.button_pickSurface.setText(f"Surface: {selection[0].name}")
+        
         else:
-            self.ui.button_pickSurface.setText("Select a valid Surface in viewport first.")
+            self.ui.button_pickSurface.setText("ERROR:Select a valid Surface.")
     
-    # Manage source objects list
+    # --------------------------- Elements list management ---------------------------
 
     def on_add(self):
         picked_obj = rt.selection[0] if rt.selection.count > 0 else None
@@ -154,17 +167,23 @@ class ScatterToolApp(QtWidgets.QMainWindow):
             self.manager.add_many(selected_objs)
             self.refresh_listview()
     
-    # Randomization seed button
+    # --------------------------- Randomization ---------------------------
 
-    def on_seed_clicked(self):
-        self.on_update()
-    
+    def on_shuffle_clicked(self):
+        elements = self.manager.get_all()
+        if not elements:
+            print("No elements to shuffle.")
+            return
+        random.shuffle(elements)
+        self.manager.elements = elements
+        self.refresh_listview()
+        print("Elements shuffled.")
     # Enable/disable randomization controls based on checkbox state
     
     def on_toggle_random(self,enabled):
         enabled= self.ui.checkBox_random.isChecked()
 
-        self.ui.button_seed.setEnabled(enabled)
+        self.ui.button_shuffle.setEnabled(enabled)
         self.ui.spin_PxMin.setEnabled(enabled)
         self.ui.spin_PxMax.setEnabled(enabled)
         self.ui.spin_PyMin.setEnabled(enabled)
@@ -183,35 +202,61 @@ class ScatterToolApp(QtWidgets.QMainWindow):
             self.ui.spin_SyMin.setEnabled(False)
             self.ui.spin_SyMax.setEnabled(False)
             self.ui.spin_SzMin.setEnabled(False)
-            self.ui.spin_SxMax_2.setEnabled(False)
+            self.ui.spin_SzMax.setEnabled(False)
         else:
             self.ui.spin_SyMin.setEnabled(enabled)
             self.ui.spin_SyMax.setEnabled(enabled)
             self.ui.spin_SzMin.setEnabled(enabled)
-            self.ui.spin_SxMax_2.setEnabled(enabled)
+            self.ui.spin_SzMax.setEnabled(enabled)
   
 
-    #launch the scatter function
+    # --------------------------- Launch scatter ---------------------------
 
     def on_update(self):
         source_obj = self.manager.get_random()
-        spline_obj = self.scatter_tool.spline
-        source_surface = self.scatter_tool.surface
-        distance = None #self.ui.spinBox_distance.value()
+        if not source_obj:
+            print("No source object selected.")
+            return
+        
+        if self.current_group is None:
+            mode = "spline" if self.ui.button_spline.isChecked() else "surface"
+            target_obj = self.current_group.spline if mode == "spline" else self.current_group.surface
+        
+            if not target_obj:
+                raise ValueError("You must pick a valid target (Spline or Surface) before updating scatter.")
+        
+        
+        # ------------- Create group dynamically -------------
+            self.current_group = self.scatter_tool.create_group(
+                source_obj=source_obj,
+                target_obj=target_obj,
+                mode=mode
+            )
+        else:
+            # If group exists, just update the source and target
+            if mode == "spline":
+                self.current_group.scatter_spline(source_obj)
+            else:
+                self.current_group.scatter_surface(source_obj)
+        # ------------- Gather parameters from UI -------------
         count = self.ui.spin_elementCount.value()
+        distance = None  # Opcional: self.ui.spinBox_distance.value()
 
         #check if randomization is False
         if self.ui.checkBox_random.isChecked():
-            pos_jitterX =random.uniform(self.ui.spin_PxMin.value(),self.ui.spin_PxMax.value())
-            pos_jitterY =random.uniform(self.ui.spin_PyMin.value(),self.ui.spin_PyMax.value())
-            pos_jitterZ =random.uniform(self.ui.spin_PzMin.value(),self.ui.spin_PzMax.value())
+            pos_jitterX = random.uniform(self.ui.spin_PxMin.value(), self.ui.spin_PxMax.value())
+            pos_jitterY = random.uniform(self.ui.spin_PyMin.value(), self.ui.spin_PyMax.value())
+            pos_jitterZ = random.uniform(self.ui.spin_PzMin.value(), self.ui.spin_PzMax.value())
 
             if self.ui.checkBox_proportionalScale.isChecked():
-                scale_rangeX=scale_rangeY=scale_rangeZ=(self.ui.spin_SxMin.value(),self.ui.spin_SxMax.value())
+                scale_rangeX = scale_rangeY = scale_rangeZ = (
+                    self.ui.spin_SxMin.value()/100,
+                    self.ui.spin_SxMax.value()/100
+                )
             else:
-                scale_rangeX = (self.ui.spin_SxMin.value(), self.ui.spin_SxMax.value())
-                scale_rangeY = (self.ui.spin_SyMin.value(), self.ui.spin_SyMax.value())
-                scale_rangeZ = (self.ui.spin_SzMin.value(), self.ui.spin_SxMax_2.value())
+                scale_rangeX = (self.ui.spin_SxMin.value()/100, self.ui.spin_SxMax.value()/100)
+                scale_rangeY = (self.ui.spin_SyMin.value()/100, self.ui.spin_SyMax.value()/100)
+                scale_rangeZ = (self.ui.spin_SzMin.value()/100, self.ui.spin_SzMax.value()/100)
 
             rot_x_range = (self.ui.spin_RxMin.value(), self.ui.spin_RxMax.value())
             rot_y_range = (self.ui.spin_RyMin.value(), self.ui.spin_RyMax.value())
@@ -221,30 +266,21 @@ class ScatterToolApp(QtWidgets.QMainWindow):
             scale_rangeX = scale_rangeY = scale_rangeZ = (1.0, 1.0)
             rot_x_range = rot_y_range = rot_z_range = (0.0, 0.0)
 
-        #check if spline or surface mode is selected
-            
-        if self.ui.button_spline.isChecked():
-            self.ui.button_pickSurface.setEnabled(False)
-            self.scatter_tool.scatter_spline(source_obj, spline_obj,
-                                  distance,
-                                  count,
-                                  pos_jitter=rt.point3(pos_jitterX, pos_jitterY, pos_jitterZ),
-                                  scale_rangeX=scale_rangeX,
-                                  scale_rangeY=scale_rangeY,
-                                  scale_rangeZ=scale_rangeZ,
-                                  rot_x_range=rot_x_range,
-                                  rot_y_range=rot_y_range,
-                                  rot_z_range=rot_z_range)
-        else:
-            self.ui.button_pickSpline.setEnabled(False)
-            self.scatter_tool.scatter_surface(source_obj, source_surface,
-                                  count,
-                                  scale_rangeX=scale_rangeX,
-                                  scale_rangeY=scale_rangeY,
-                                  scale_rangeZ=scale_rangeZ,
-                                  rot_x_range=rot_x_range,
-                                  rot_y_range=rot_y_range,
-                                  rot_z_range=rot_z_range)
+        #store parameters
+        self.current_group.params.update({
+            "count": count,
+            "distance": distance,
+            "pos_jitter": rt.point3(pos_jitterX, pos_jitterY, pos_jitterZ),
+            "scale_rangeX": scale_rangeX,
+            "scale_rangeY": scale_rangeY,
+            "scale_rangeZ": scale_rangeZ,
+            "rot_x_range": rot_x_range,
+            "rot_y_range": rot_y_range,
+            "rot_z_range": rot_z_range,
+            "source_obj": source_obj
+        })
+
+# --------------------------- Launch window ---------------------------            
 _WINDOW = None
 def launch():
     global _WINDOW

@@ -233,10 +233,10 @@ class Ui_ScatterToolUI(object):
 
         self.horizontalLayout_06.addWidget(self.checkBox_random)
 
-        self.button_seed = QPushButton(self.verticalLayoutWidget_8)
-        self.button_seed.setObjectName(u"button_seed")
+        self.button_shuffle = QPushButton(self.verticalLayoutWidget_8)
+        self.button_shuffle.setObjectName(u"button_shuffle")
 
-        self.horizontalLayout_06.addWidget(self.button_seed)
+        self.horizontalLayout_06.addWidget(self.button_shuffle)
 
 
         self.GeneralVertLayout.addLayout(self.horizontalLayout_06)
@@ -617,17 +617,17 @@ class Ui_ScatterToolUI(object):
 
         self.horizontalLayout_15.addWidget(self.spin_SzMin)
 
-        self.spin_SxMax_2 = QSpinBox(self.verticalLayoutWidget_8)
-        self.spin_SxMax_2.setObjectName(u"spin_SxMax_2")
-        self.spin_SxMax_2.setContextMenuPolicy(Qt.ContextMenuPolicy.DefaultContextMenu)
-        self.spin_SxMax_2.setLayoutDirection(Qt.LayoutDirection.LeftToRight)
-        self.spin_SxMax_2.setWrapping(False)
-        self.spin_SxMax_2.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.UpDownArrows)
-        self.spin_SxMax_2.setMaximum(999)
-        self.spin_SxMax_2.setStepType(QAbstractSpinBox.StepType.DefaultStepType)
-        self.spin_SxMax_2.setDisplayIntegerBase(10)
+        self.spin_SzMax = QSpinBox(self.verticalLayoutWidget_8)
+        self.spin_SzMax.setObjectName(u"spin_SzMax")
+        self.spin_SzMax.setContextMenuPolicy(Qt.ContextMenuPolicy.DefaultContextMenu)
+        self.spin_SzMax.setLayoutDirection(Qt.LayoutDirection.LeftToRight)
+        self.spin_SzMax.setWrapping(False)
+        self.spin_SzMax.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.UpDownArrows)
+        self.spin_SzMax.setMaximum(999)
+        self.spin_SzMax.setStepType(QAbstractSpinBox.StepType.DefaultStepType)
+        self.spin_SzMax.setDisplayIntegerBase(10)
 
-        self.horizontalLayout_15.addWidget(self.spin_SxMax_2)
+        self.horizontalLayout_15.addWidget(self.spin_SzMax)
 
 
         self.GeneralVertLayout.addLayout(self.horizontalLayout_15)
@@ -688,7 +688,7 @@ class Ui_ScatterToolUI(object):
         self.label_ViewDisplay.setText(QCoreApplication.translate("ScatterToolUI", u"Viewport Display %", None))
         self.label_elemTransf.setText(QCoreApplication.translate("ScatterToolUI", u"Elements Transform", None))
         self.checkBox_random.setText(QCoreApplication.translate("ScatterToolUI", u"Random", None))
-        self.button_seed.setText(QCoreApplication.translate("ScatterToolUI", u"Seed", None))
+        self.button_shuffle.setText(QCoreApplication.translate("ScatterToolUI", u"Shuffle", None))
         self.label_position.setText(QCoreApplication.translate("ScatterToolUI", u"Position", None))
         self.label_PosX.setText(QCoreApplication.translate("ScatterToolUI", u"X", None))
         self.label_PosY.setText(QCoreApplication.translate("ScatterToolUI", u"Y", None))
