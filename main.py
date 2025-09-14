@@ -32,15 +32,20 @@ class ScatterToolApp(QtWidgets.QMainWindow):
         self.current_group = None
 
         #connect mode buttons
-        self.ui.button_spline.toggled.connect(self.mode_buttons)
-        self.ui.button_surface.toggled.connect(self.mode_buttons)
+        self.ui.button_box.toggled.connect(self.on_box_view)
+        self.ui.button_mesh.toggled.connect(self.on_box_view)
 
         #connect box/mesh view buttons
-        self.mode_buttons()
-
+        self.ui.button_box.toggled.connect(self.on_box_view)
+        self.ui.button_mesh.toggled.connect(self.on_box_view)
+        
+        #default selections
         self.ui.button_spline.setChecked(True)
         self.ui.button_mesh.setChecked(True)
 
+        #default count
+        self.ui.spin_elementCount.setValue(5)
+        
         #elements manager to handle source objects.
         self.manager = ElementsManager()
         self.source_obj = None
@@ -55,6 +60,11 @@ class ScatterToolApp(QtWidgets.QMainWindow):
         self.on_toggle_random(False)
         self.ui.checkBox_random.stateChanged.connect(lambda state: self.on_toggle_random(state == 2))
         self.ui.checkBox_proportionalScale.stateChanged.connect(self.on_toggle_random)
+        self.ui.checkBox_proportionalScale.setChecked(True)
+        #default scale values
+        self.ui.spin_SxMin.setValue(100)
+        self.ui.spin_SxMax.setValue(100)
+
 
 
 
@@ -88,10 +98,55 @@ class ScatterToolApp(QtWidgets.QMainWindow):
             self.ui.button_pickSpline.setEnabled(False)
 
      # --------------------------- Box / Mesh View ---------------------------# 
-    def on_box_view(self):
-        if self.current_group:
-            self.current_group.set_display_as_box(self.ui.button_box.isChecked())
-        self.ui.button_mesh.setChecked(not self.ui.button_box.isChecked())
+    def on_box_view(self,enable=True):
+        """Toggle display as box for the currently selected group's instances."""
+        enable = self.ui.button_box.isChecked() if enable is None else enable
+        sel = list(rt.selection)
+        if not sel:
+            try:
+                rt.messageBox(
+                    "Select the group's dummy controller first.",
+                    title="Scatter Tool Warning",
+                    button=rt.name("ok"),
+                    icon=rt.name("warning")
+                )
+            except Exception as e:
+                print(f"ERROR: Cannot show messageBox: {e}")
+            self.ui.button_box.setChecked(False)
+            self.ui.button_mesh.setChecked(True)
+            return
+
+        obj = sel[0]
+
+        # serch for the group that has this controller
+        group = None
+        for g in self.scatter_tool.groups:
+            if rt.isValidNode(g.controller) and g.controller == obj:
+                group = g
+                break
+
+        if not group:
+            try:
+                rt.messageBox(
+                    "The selected object is not a valid scatter group controller.",
+                    title="Scatter Tool Warning",
+                    button=rt.name("ok"),
+                    icon=rt.name("warning")
+                )
+            except Exception as e:
+                print(f"ERROR: Cannot show messageBox: {e}")
+            self.ui.button_box.setChecked(False)
+            self.ui.button_mesh.setChecked(True)
+            return
+
+        
+        print(f"DEBUG: on_box_view called. button_box={enable}")
+
+        # set display mode
+        group.set_display_as_box(enable)
+
+        # update button states
+        self.ui.button_mesh.setChecked(not enable)
 
     # --------------------------- Pick spline / surface ---------------------------
     def on_pick_spline(self):
@@ -193,7 +248,7 @@ class ScatterToolApp(QtWidgets.QMainWindow):
     # --------------------------- Launch scatter ---------------------------
 
     def on_update(self):
-               
+              
         source_obj = self.manager.get_random()
         if not source_obj:
             print("No source object selected.")
@@ -203,18 +258,19 @@ class ScatterToolApp(QtWidgets.QMainWindow):
         # ------------- Gather parameters from UI -------------
         count = self.ui.spin_elementCount.value()
         distance = None  # Opcional: self.ui.spinBox_distance.value()
-
+ 
         #check if randomization is False
         if self.ui.checkBox_random.isChecked():
             pos_jitterX = random.uniform(self.ui.spin_PxMin.value(), self.ui.spin_PxMax.value())
             pos_jitterY = random.uniform(self.ui.spin_PyMin.value(), self.ui.spin_PyMax.value())
             pos_jitterZ = random.uniform(self.ui.spin_PzMin.value(), self.ui.spin_PzMax.value())
 
-            if self.ui.checkBox_proportionalScale.isChecked():
-                scale_rangeX = scale_rangeY = scale_rangeZ = (
-                    self.ui.spin_SxMin.value()/100,
-                    self.ui.spin_SxMax.value()/100
-                )
+
+            proportional = self.ui.checkBox_proportionalScale.isChecked()
+            if proportional:
+                scale_rangeX = (self.ui.spin_SxMin.value()/100, self.ui.spin_SxMax.value()/100)
+                scale_rangeY = scale_rangeZ = scale_rangeX #same range for Y and Z
+                
             else:
                 scale_rangeX = (self.ui.spin_SxMin.value()/100, self.ui.spin_SxMax.value()/100)
                 scale_rangeY = (self.ui.spin_SyMin.value()/100, self.ui.spin_SyMax.value()/100)
@@ -227,6 +283,7 @@ class ScatterToolApp(QtWidgets.QMainWindow):
             pos_jitterX = pos_jitterY = pos_jitterZ = 0.0
             scale_rangeX = scale_rangeY = scale_rangeZ = (1.0, 1.0)
             rot_x_range = rot_y_range = rot_z_range = (0.0, 0.0)
+            proportional = False  # default to proportional if random is off 
 
         #store parameters
         params_dict={
@@ -239,7 +296,8 @@ class ScatterToolApp(QtWidgets.QMainWindow):
             "rot_x_range": rot_x_range,
             "rot_y_range": rot_y_range,
             "rot_z_range": rot_z_range,
-            "source_obj": source_obj
+            "source_obj": source_obj,
+            "proportional_scale": proportional
         }
        
         # Check if there's a selected group in the scene
@@ -261,13 +319,15 @@ class ScatterToolApp(QtWidgets.QMainWindow):
                 mode=mode
             )
             print(f"DEBUG:Created new group with target: {target_obj.name} in mode: {mode}")#DEBUG
+            #assign manager to the group
+            self.current_group.manager = self.manager #test
         # ------------- Update parameters and scatter -------------
         self.current_group.params.update(params_dict)
         
         if mode == "spline":
-            self.current_group.scatter_spline(source_obj)
+            self.current_group.scatter_spline(self.current_group.params["source_obj"])
         else:
-            self.current_group.scatter_surface(source_obj)
+            self.current_group.scatter_surface(self.current_group.params["source_obj"])
 
 # --------------------------- Launch window ---------------------------            
 _WINDOW = None

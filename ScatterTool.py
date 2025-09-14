@@ -113,13 +113,6 @@ class ScatterGroup:
         self.layer.addNode(self.controller)
        # self.layer.isFrozen = True
 
-    def clear_instances(self, delete_nodes=False):
-        if delete_nodes:
-            for inst in self.instances:
-                if rt.isValidNode(inst.node):
-                    rt.delete(inst.node)
-        self.instances.clear()
-
     def set_spline(self, spline):
         self.spline = spline
 
@@ -128,35 +121,73 @@ class ScatterGroup:
         
     #clear instances
     def clear_instances(self, delete_nodes=False):
+        print(f"DEBUG: clear_instances called, delete_nodes={delete_nodes}")
+        print(f"DEBUG: Instances before clear = {[inst.node.name for inst in self.instances if rt.isValidNode(inst.node)]}")
+
         if delete_nodes:
-            for obj in self.instances:
-                if rt.isValidNode(obj):
-                    rt.delete(obj)
+            for inst in self.instances:
+                node = getattr(inst, 'node', None)
+                if node and rt.isValidNode(node):
+                    print(f"DEBUG: Deleting node {node.name}")
+                    rt.delete(node)
+
         self.instances.clear()
+
+        remaining_nodes = [n.name for n in rt.objects if n.name.startswith(f"{self.name}_")]
+        print(f"DEBUG: Remaining nodes in scene with group prefix = {remaining_nodes}")
 
     #show instance as box
     def set_display_as_box(self,enable=True):
-        for obj in self.instances:
-            if rt.isValidNode(obj): 
-                obj.displayAsBox = enable
+        """Toggle 'Display as Box' for all instances in this group."""
+        if not self.instances:
+            print(f"DEBUG: No instances in group '{self.name}' to change displayAsBox.")
+            return
 
-    def apply_random_scale_and_rotation(self,inst):
-            # Apply scale
+        count_changed = 0
+        for inst in self.instances:
+            if hasattr(inst, "node") and rt.isValidNode(inst.node):
+                try:
+                    # Intentar con diferentes propiedades según el tipo de nodo
+                    if hasattr(inst.node, "boxMode"):
+                        inst.node.boxMode = enable
+                    elif hasattr(inst.node, "displayAsBox"):
+                        inst.node.displayAsBox = enable
+                    elif hasattr(inst.node, "objectDisplay") and hasattr(inst.node.objectDisplay, "asBox"):
+                        inst.node.objectDisplay.asBox = enable
+                    else:
+                        print(f"DEBUG: Node '{inst.node.name}' does not support box display property.")
+                        continue
+                    count_changed += 1
+                except Exception as e:
+                    print(f"DEBUG: Could not change node '{inst.node.name}': {e}")
+
+        print(f"DEBUG: Changed displayAsBox for {count_changed} nodes in group '{self.name}'.")
+
+    def apply_random_scale_and_rotation(self,inst): 
+        # Apply scale
+        if self.params.get("proportional_scale", True):
+            s = random.uniform(*self.params["scale_rangeX"])
+            inst.scale = rt.point3(s, s, s)
+        else:
             sx = random.uniform(*self.params["scale_rangeX"])
             sy = random.uniform(*self.params["scale_rangeY"])
             sz = random.uniform(*self.params["scale_rangeZ"])
             inst.scale = rt.point3(sx, sy, sz)
 
-            rx = random.uniform(*self.params["rot_x_range"])
-            ry = random.uniform(*self.params["rot_y_range"])
-            rz = random.uniform(*self.params["rot_z_range"])
-            # Apply rotations
-            rt.rotate(inst, rt.eulerAngles(rx, ry, rz))
+        # Apply rotation
+        rx = random.uniform(*self.params["rot_x_range"])
+        ry = random.uniform(*self.params["rot_y_range"])
+        rz = random.uniform(*self.params["rot_z_range"])
+        
+        rt.rotate(inst, rt.eulerAngles(rx, ry, rz))
     
     def scatter_spline(self,source_obj):
+        print(f"DEBUG: scatter_spline() called for source '{source_obj.name}'")  # Debug entrada
+        print("DEBUG: Calling clear_instances(delete_nodes=True)...")  # Debug antes
         self.clear_instances(delete_nodes=True)
-        if not (rt.isValidNode(source_obj) and rt.isValidNode(self.spline)):
-            print("ERROR: Select a spline first and the mesh second.")
+        print(f"DEBUG: Instances after clear = {len(self.instances)}")  # Debug después
+        if not rt.isValidNode(self.spline):
+            print("ERROR: invalid spline target.")
             return 
 
         shape = self.spline
@@ -187,6 +218,15 @@ class ScatterGroup:
             pos = rt.pathInterp(shape, spline_index, param)
             tangent = rt.normalize(rt.pathTangent(shape, spline_index, param))
 
+            #add a random source object from the list
+            
+            if hasattr(self,'manager') and self.manager.get_all():
+                source_obj = self.manager.get_random()
+            print(f"DEBUG: Selected source object: {source_obj.name if source_obj else 'None'}")  # Debug source object
+            if not source_obj:
+                print("ERROR: No source object available.")
+                return
+
             # Add jitter
             jitter = rt.point3(
                 random.uniform(-self.params["pos_jitter"].x, self.params["pos_jitter"].x),
@@ -210,7 +250,7 @@ class ScatterGroup:
 
             self.apply_random_scale_and_rotation(inst)
             self.instances.append(ScatterInstance(inst))
-            self.layer.addNode(inst)
+            # Reset controllers to avoid unexpected behavior
             inst.pos.controller = rt.Position_XYZ()
             inst.rotation.controller = rt.Euler_XYZ()
 
