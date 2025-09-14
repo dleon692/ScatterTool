@@ -82,8 +82,8 @@ class ScatterGroup:
 
     def __init__(self,name,surface=None,spline=None):
         self.name = name
-        self.spline=surface
-        self.surface=spline
+        self.spline=spline
+        self.surface=surface
         self.instances = []
         self.controller=None #dummy for future use
         self.layer=None #layer for the groups
@@ -111,7 +111,7 @@ class ScatterGroup:
         # Layer
         self.layer = rt.LayerManager.newLayerFromName(self.name)
         self.layer.addNode(self.controller)
-        self.layer.isFrozen = True
+       # self.layer.isFrozen = True
 
     def clear_instances(self, delete_nodes=False):
         if delete_nodes:
@@ -157,7 +157,7 @@ class ScatterGroup:
         self.clear_instances(delete_nodes=True)
         if not (rt.isValidNode(source_obj) and rt.isValidNode(self.spline)):
             print("ERROR: Select a spline first and the mesh second.")
-            return
+            return 
 
         shape = self.spline
         spline_index = 1
@@ -175,6 +175,9 @@ class ScatterGroup:
         if count is not None:
             instance_count = count
         else:
+            if distance is None or distance <= 0:
+                print("⚠ ERROR: 'distance' is not set, cannot calculate instance_count.")
+                return
             instance_count = int(curve_length // distance) + 1
 
         param_range = instance_count if is_closed else instance_count - 1
@@ -207,12 +210,15 @@ class ScatterGroup:
 
             self.apply_random_scale_and_rotation(inst)
             self.instances.append(ScatterInstance(inst))
+            self.layer.addNode(inst)
+            inst.pos.controller = rt.Position_XYZ()
+            inst.rotation.controller = rt.Euler_XYZ()
 
         print(f"✅ {instance_count} instances of '{source_obj.name}' were created along the spline.")
 
     def scatter_surface(self,source_obj):
         self.clear_instances(delete_nodes=True)
-        
+        print(f"DEBUG: NODES WAS CLEARED")#DEBUG
         if not (rt.isValidNode(source_obj) and rt.isValidNode(self.surface)):
             print("ERROR: Select a source object and Editable Poly surface second.")
             return
@@ -317,7 +323,7 @@ class ScatterTool:
     
     def get_group_by_selection(self):
         
-        sel = rt.selection
+        sel =list(rt.selection)
         if not sel:
             print("ERROR: No objects selected in the scene.")
             return None
@@ -325,7 +331,7 @@ class ScatterTool:
         obj = sel[0]
 
         for g in self.groups:
-            if rt.isValidNode(g.controller) and g.controller.name == f"{obj.name}_CTRL":
+            if rt.isValidNode(g.controller) and g.controller == obj:
                 return g
 
         print("No existing group found for selection.")

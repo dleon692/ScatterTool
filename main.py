@@ -23,6 +23,9 @@ class ScatterToolApp(QtWidgets.QMainWindow):
         self.distribution_group.addButton(self.ui.button_surface)
         self.distribution_group.setExclusive(True)
 
+        self.pending_target = None   #temp target object before creating the group
+        self.pending_mode = None     #temp mode before creating the group
+
         #create scatter tool instance
         self.scatter_tool = ScatterTool()
 
@@ -93,44 +96,21 @@ class ScatterToolApp(QtWidgets.QMainWindow):
     # --------------------------- Pick spline / surface ---------------------------
     def on_pick_spline(self):
         selection = rt.selection
-        if selection.count > 0 and rt.isKindOf(selection[0], rt.SplineShape):
-            if self.current_group:
-                self.current_group.set_spline(selection[0])
-            self.ui.button_pickSpline.setText(f"Spline: {selection[0].name}")
+        if selection.count > 0 and rt.superClassOf(selection[0]) == rt.Shape:
+            shape=selection[0]
+            self.pending_target=shape
+            self.pending_mode="spline"
+            self.ui.button_pickSpline.setText(f"Spline: {shape.name}")
         else:
-            self.ui.button_pickSpline.setText("ERROR: Select a valid Spline.")
-
-        """try:
-            # Selecciona un objeto de la escena
-            picked = rt.pickObject(prompt="Pick a spline")
-            if not picked:
-                self.ui.button_pickSpline.setText("No object selected.")
-                return
-
-            # Verifica si es un SplineShape; si no, lo convierte
-            if rt.classOf(picked) != rt.SplineShape:
-                try:
-                    picked = rt.convertToSplineShape(picked)
-                    print(f"Converted to SplineShape: {picked.name}")
-                except RuntimeError:
-                    self.ui.button_pickSpline.setText("Cannot convert to SplineShape.")
-                    return
-
-            # Asigna el spline al ScatterTool
-            self.scatter_tool.set_spline(picked)
-            self.ui.button_pickSpline.setText(f"Spline: {picked.name}")
-
-        except RuntimeError:
-            self.ui.button_pickSpline.setText("Pick canceled or invalid object.")
-                """
+            self.ui.button_pickSpline.setText("ERROR: Select a valid Spline.")        
 
     def on_pick_surface(self):
         selection = rt.selection
         if selection.count > 0 and rt.isKindOf(selection[0], rt.GeometryClass):
-            if self.current_group:
-                self.current_group.set_surface(selection[0])
-            self.ui.button_pickSurface.setText(f"Surface: {selection[0].name}")
-        
+            surface=selection[0]
+            self.pending_target=surface
+            self.pending_mode="surface"
+            self.ui.button_pickSurface.setText(f"Surface: {surface.name}")  
         else:
             self.ui.button_pickSurface.setText("ERROR:Select a valid Surface.")
     
@@ -213,31 +193,13 @@ class ScatterToolApp(QtWidgets.QMainWindow):
     # --------------------------- Launch scatter ---------------------------
 
     def on_update(self):
+               
         source_obj = self.manager.get_random()
         if not source_obj:
             print("No source object selected.")
             return
         
-        if self.current_group is None:
-            mode = "spline" if self.ui.button_spline.isChecked() else "surface"
-            target_obj = self.current_group.spline if mode == "spline" else self.current_group.surface
-        
-            if not target_obj:
-                raise ValueError("You must pick a valid target (Spline or Surface) before updating scatter.")
-        
-        
-        # ------------- Create group dynamically -------------
-            self.current_group = self.scatter_tool.create_group(
-                source_obj=source_obj,
-                target_obj=target_obj,
-                mode=mode
-            )
-        else:
-            # If group exists, just update the source and target
-            if mode == "spline":
-                self.current_group.scatter_spline(source_obj)
-            else:
-                self.current_group.scatter_surface(source_obj)
+        mode = "spline" if self.ui.button_spline.isChecked() else "surface"
         # ------------- Gather parameters from UI -------------
         count = self.ui.spin_elementCount.value()
         distance = None  # Opcional: self.ui.spinBox_distance.value()
@@ -267,7 +229,7 @@ class ScatterToolApp(QtWidgets.QMainWindow):
             rot_x_range = rot_y_range = rot_z_range = (0.0, 0.0)
 
         #store parameters
-        self.current_group.params.update({
+        params_dict={
             "count": count,
             "distance": distance,
             "pos_jitter": rt.point3(pos_jitterX, pos_jitterY, pos_jitterZ),
@@ -278,7 +240,34 @@ class ScatterToolApp(QtWidgets.QMainWindow):
             "rot_y_range": rot_y_range,
             "rot_z_range": rot_z_range,
             "source_obj": source_obj
-        })
+        }
+       
+        # Check if there's a selected group in the scene
+        selected_group = self.scatter_tool.get_group_by_selection()
+        if selected_group:
+            self.current_group = selected_group
+            print(f"DEBUG: Using existing group: {self.current_group.name}")#DEBUG
+        # ------------- Create or update group -------------
+        if self.current_group is None:
+            if self.pending_target is None or self.pending_mode != mode:
+                raise ValueError("You must pick a valid target (Spline or Surface) before updating scatter.")
+            target_obj = self.pending_target    
+
+        
+        # ------------- Create group dynamically -------------
+            self.current_group = self.scatter_tool.create_group(
+                source_obj=source_obj,
+                target_obj=target_obj,
+                mode=mode
+            )
+            print(f"DEBUG:Created new group with target: {target_obj.name} in mode: {mode}")#DEBUG
+        # ------------- Update parameters and scatter -------------
+        self.current_group.params.update(params_dict)
+        
+        if mode == "spline":
+            self.current_group.scatter_spline(source_obj)
+        else:
+            self.current_group.scatter_surface(source_obj)
 
 # --------------------------- Launch window ---------------------------            
 _WINDOW = None
