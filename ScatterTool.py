@@ -48,7 +48,7 @@ class ElementsManager:
     def clear(self):
         """Clear the entire list."""
         self.elements.clear()
-        print("[Cleared] All elements removed.")
+        print("[Cleared] All elements in the UI list was removed.")
 
     def get_random(self):
         """returns a random element from the list."""
@@ -99,19 +99,43 @@ class ScatterGroup:
             "rot_z_range": (0, 0)
         }
         self._setup_group_in_scene()
+        self.manager = None #source objects manager
+        print(f"DEBUG: Created group '{self.name}' with controller '{self.controller.name}'")#DEBUG
     
-    #
-    def _setup_group_in_scene(self):
-        # Dummy
-        self.controller = rt.Point(name=f"{self.name}_CTRL")
-        self.controller.size = 10
-        self.controller.box = True
-        self.controller.wirecolor = rt.color(255, 200, 0)
+    def _setup_group_in_scene(self,target_obj=None):
+        self.target = target_obj  
+        #setup controller and layer scene , if they already exist use them
+        ctrl_name = f"{self.name}_CTRL"
+        existing_ctrl = rt.getNodeByName(ctrl_name)
+
+        if existing_ctrl and rt.isValidNode(existing_ctrl):
+            self.controller = existing_ctrl
+            print(f"DEBUG: Controller '{self.controller.name}' already exists.")  # DEBUG
+        else:
+            self.controller = rt.Point(name=ctrl_name)
+            self.controller.size = 10
+            self.controller.box = True
+            self.controller.wirecolor = rt.color(255, 200, 0)
+            print(f"DEBUG: Created new controller '{self.controller.name}'.")  # DEBUG
+            # Position controller at the center of the target object
+            if target_obj and rt.isValidNode(target_obj):
+                if rt.superClassOf(target_obj) == rt.Shape:  # Spline
+                    self.controller.position = rt.pathInterp(target_obj, 1, 0.0)
+                elif rt.isKindOf(target_obj, rt.GeometryClass):  # Surface
+                    bb_min, bb_max = rt.nodeGetBoundingBox(target_obj, rt.matrix3(1))
+                    self.controller.position = (bb_min + bb_max) / 2
+        #Group info in controller's user properties
+        rt.setUserProp(self.controller, "ScatterGroup", self.name) #tag for identify the group from the controller
 
         # Layer
-        self.layer = rt.LayerManager.newLayerFromName(self.name)
-        self.layer.addNode(self.controller)
-       # self.layer.isFrozen = True
+        existing_layer = rt.LayerManager.getLayerFromName(self.name)
+        if existing_layer is None:
+            self.layer = rt.LayerManager.newLayerFromName(self.name)
+        else:
+            self.layer = existing_layer
+        if self.controller not in self.layer.nodes:
+            self.layer.addNode(self.controller)
+            # self.layer.isFrozen = True
 
     def set_spline(self, spline):
         self.spline = spline
@@ -121,6 +145,20 @@ class ScatterGroup:
         
     #clear instances
     def clear_instances(self, delete_nodes=False):
+        # if no valid controller, exit
+        if not hasattr(self, 'controller') or not rt.isValidNode(self.controller):
+            print(f"DEBUG: No existing controller for this scatter.Exiting clear_instances.")
+            return
+        #if no instances, exit
+        if not hasattr(self, 'instances') or not self.instances:
+            print(f"DEBUG: No instances list found for {self.name}. Exiting clear_instances.")
+            return
+
+        valid_instances = [inst for inst in self.instances if getattr(inst, 'node', None) and rt.isValidNode(inst.node)]
+        if not valid_instances:
+            print(f"DEBUG: No valid instances associated with {self.name}. Exiting clear_instances.")
+            return
+            
         print(f"DEBUG: clear_instances called, delete_nodes={delete_nodes}")
         print(f"DEBUG: Instances before clear = {[inst.node.name for inst in self.instances if rt.isValidNode(inst.node)]}")
 
@@ -129,10 +167,12 @@ class ScatterGroup:
                 node = getattr(inst, 'node', None)
                 if node and rt.isValidNode(node):
                     print(f"DEBUG: Deleting node {node.name}")
+                    rt.clearSelection()
+                    rt.select(node)
                     rt.delete(node)
-
-        self.instances.clear()
-
+        # Remove invalid instances from the list
+        self.instances = [inst for inst in self.instances if getattr(inst, 'node', None) and rt.isValidNode(inst.node)]
+        print(f"DEBUG: Instances after clear = {[inst.node.name for inst in self.instances if rt.isValidNode(inst.node)]}")
         remaining_nodes = [n.name for n in rt.objects if n.name.startswith(f"{self.name}_")]
         print(f"DEBUG: Remaining nodes in scene with group prefix = {remaining_nodes}")
 
@@ -143,25 +183,11 @@ class ScatterGroup:
             print(f"DEBUG: No instances in group '{self.name}' to change displayAsBox.")
             return
 
-        count_changed = 0
-        for inst in self.instances:
-            if hasattr(inst, "node") and rt.isValidNode(inst.node):
-                try:
-                    # Intentar con diferentes propiedades según el tipo de nodo
-                    if hasattr(inst.node, "boxMode"):
-                        inst.node.boxMode = enable
-                    elif hasattr(inst.node, "displayAsBox"):
-                        inst.node.displayAsBox = enable
-                    elif hasattr(inst.node, "objectDisplay") and hasattr(inst.node.objectDisplay, "asBox"):
-                        inst.node.objectDisplay.asBox = enable
-                    else:
-                        print(f"DEBUG: Node '{inst.node.name}' does not support box display property.")
-                        continue
-                    count_changed += 1
-                except Exception as e:
-                    print(f"DEBUG: Could not change node '{inst.node.name}': {e}")
-
-        print(f"DEBUG: Changed displayAsBox for {count_changed} nodes in group '{self.name}'.")
+        for inst in self.instances:       
+            if hasattr(inst.node, "boxMode"):
+                inst.node.boxMode = enable
+            elif hasattr(inst.node, "displayAsBox"):
+                inst.node.displayAsBox = enable
 
     def apply_random_scale_and_rotation(self,inst): 
         # Apply scale
@@ -340,6 +366,56 @@ class ScatterGroup:
 class ScatterTool:
     def __init__(self):
         self.groups = []
+        self._load_existing_groups()
+
+    def _load_existing_groups(self):
+        """Load existing scatter groups from the scene based on naming convention."""
+        for obj in rt.objects:
+            if obj.name.endswith("_CTRL") and rt.isValidNode(obj): # Check if it's a valid node
+                group_name = rt.getUserProp(obj, "ScatterGroup") 
+                if group_name:# Check if user property exists
+                    # Check if group already loaded
+                    g = ScatterGroup.__new__(ScatterGroup)  # crea instancia vacía
+                    g.name = group_name
+                    g.target = None
+                    g.controller = obj
+                    g.layer = rt.LayerManager.getLayerFromName(group_name)
+                    g.instances = []
+                    g.manager = ElementsManager()
+                    g.params = {
+                    "count": None,
+                    "distance": None,
+                    "pos_jitter": rt.point3(0,0,0),
+                    "scale_rangeX": (1.0,1.0),
+                    "scale_rangeY": (1.0,1.0),
+                    "scale_rangeZ": (1.0,1.0),
+                    "rot_x_range": (0,0),
+                    "rot_y_range": (0,0),
+                    "rot_z_range": (0,0),
+                    "proportional_scale": rt.getUserProp(obj,"ScatterProportionalScale")=="True",
+                    "random": rt.getUserProp(obj,"ScatterRandom")=="True"
+                    }
+                    elements = rt.getUserProp(obj, "ScatterElements")
+                    if elements:
+                        for name in elements.split(","):
+                            node = rt.getNodeByName(name)
+                            if rt.isValidNode(node):
+                                g.manager.add(node)
+
+                    # --- load target if exists ---
+                    target_name = rt.getUserProp(obj, "ScatterTarget")
+                    if target_name:
+                        target_node = rt.getNodeByName(target_name)
+                        if rt.isValidNode(target_node):
+                            g.target = target_node
+                            #assign target to spline or surface
+                            if rt.superClassOf(target_node) == rt.Shape:
+                                g.spline = target_node
+                            elif rt.isKindOf(target_node, rt.GeometryClass):
+                                g.surface = target_node
+                    self.groups.append(g)
+
+                    print(f"DEBUG: Loaded existing group '{group_name}' from controller '{obj.name}'")
 
     def create_group(self, source_obj, target_obj, mode=None):
         if not (rt.isValidNode(source_obj) and rt.isValidNode(target_obj)):
@@ -350,6 +426,7 @@ class ScatterTool:
         group_name = f"Scatter_{len(self.groups)+1:03d}"
         new_group = ScatterGroup(group_name)
 
+        new_group._setup_group_in_scene(target_obj)
         if mode == "spline":
             new_group.set_spline(target_obj)
             new_group.scatter_spline(source_obj)
@@ -369,17 +446,59 @@ class ScatterTool:
             return None
 
         obj = sel[0]
-
-        for g in self.groups:
-            if rt.isValidNode(g.controller) and g.controller == obj:
-                return g
-
-        print("No existing group found for selection.")
-        return None
+        return self.get_group_by_controller(obj)
 
     def get_group(self, name):
         for g in self.groups:
             if g.name == name:
                 return g
         return None
+    
+    def get_group_by_controller(self, obj):
+        for g in self.groups:
+            if rt.isValidNode(g.controller):
+                if g.controller == obj or obj.parent == g.controller:
+                    print(f"DEBUG: Found group '{g.name}' by {obj.name}")
+                    return g
+        print(f"DEBUG: No group found for controller {obj.name}")
+        return None
+    
+    def update_ui_from_group(self, group):
+        # Update the UI elements based on the selected group's parameters
+        if not group or not rt.isValidNode(group.controller):
+            return
+        
+        p = group.params
+        # Target
+        self.pending_target = getattr(group, "target", None)
+        # Spinner / sliders
+        self.ui.spin_elementCount.setValue(p.get("count", 0))
+        self.ui.spin_PxMin.setValue(p["pos_jitter"].x if "pos_jitter" in p else 0)
+        self.ui.spin_PyMin.setValue(p["pos_jitter"].y if "pos_jitter" in p else 0)
+        self.ui.spin_PzMin.setValue(p["pos_jitter"].z if "pos_jitter" in p else 0)
 
+        self.ui.spin_SxMin.setValue(int(p["scale_rangeX"][0]*100))
+        self.ui.spin_SxMax.setValue(int(p["scale_rangeX"][1]*100))
+        self.ui.spin_SyMin.setValue(int(p["scale_rangeY"][0]*100))
+        self.ui.spin_SyMax.setValue(int(p["scale_rangeY"][1]*100))
+        self.ui.spin_SzMin.setValue(int(p["scale_rangeZ"][0]*100))
+        self.ui.spin_SzMax.setValue(int(p["scale_rangeZ"][1]*100))
+
+        self.ui.spin_RxMin.setValue(p["rot_x_range"][0])
+        self.ui.spin_RxMax.setValue(p["rot_x_range"][1])
+        self.ui.spin_RyMin.setValue(p["rot_y_range"][0])
+        self.ui.spin_RyMax.setValue(p["rot_y_range"][1])
+        self.ui.spin_RzMin.setValue(p["rot_z_range"][0])
+        self.ui.spin_RzMax.setValue(p["rot_z_range"][1])
+
+        # Checkbox
+        self.ui.checkBox_random.setChecked(p.get("random", True))
+        print(f"[DEBUG UI] Setting checkbox random = {p.get('random', True)}")  # DEBUG
+        self.ui.checkBox_proportionalScale.setChecked(p.get("proportional_scale", True))
+        print(f"[DEBUG UI] Setting checkbox proportionalScale = {p.get('proportional_scale', True)}")  # DEBUG
+        
+        # Buttons
+        self.ui.button_spline.setChecked(group.spline is not None)
+        self.ui.button_surface.setChecked(group.surface is not None)
+        self.ui.button_box.setChecked(rt.getUserProp(group.controller,"ScatterDisplayAsBox")=="True")
+       
