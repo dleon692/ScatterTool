@@ -48,6 +48,9 @@ class ScatterToolApp(QtWidgets.QMainWindow):
 
         #default count
         self.ui.spin_elementCount.setValue(5)
+
+        #default viewport display 
+        self.ui.spinBox_viewDisp.setValue(100)
         
         #elements manager to handle source objects.
         self.manager = ElementsManager()
@@ -79,13 +82,17 @@ class ScatterToolApp(QtWidgets.QMainWindow):
                 ms_script,
                 id=self._sel_cb_name
                 )
-            print("DEBUG: Selection callback added successfully.")#DEBUG
         except Exception as e:
             print(f"Error adding selection callback: {e}")
         
         # Expose the application instance to builtins for access in the callback
         builtins.ScatterToolApp = ScatterToolApp
         builtins.scattertool_app_instance = self
+
+        try:
+            self.on_selection_changed()  # Load initial selection if any
+        except Exception:
+            pass 
   
     # --------------------------- UI & list handling ---------------------------
     def refresh_listview(self):
@@ -102,6 +109,7 @@ class ScatterToolApp(QtWidgets.QMainWindow):
         self.ui.pushButton_addList.clicked.connect(self.on_add_list)
         self.ui.button_shuffle.clicked.connect(self.on_shuffle_clicked)
         self.ui.Button_update.clicked.connect(self.on_update)
+        self.ui.spinBox_viewDisp.valueChanged.connect(self.on_viewport_disp_changed)
     
    # --------------------------- Mode buttons ---------------------------
 
@@ -135,7 +143,6 @@ class ScatterToolApp(QtWidgets.QMainWindow):
 
         if not group:
             self.current_group = None
-            print("DEBUG: Selected object is not a group controller.")
             return
 
         self.current_group = group
@@ -149,6 +156,19 @@ class ScatterToolApp(QtWidgets.QMainWindow):
         if not ctrl or not rt.isValidNode(ctrl):
             print("DEBUG: Group controller invalid.")
             return
+        # --- Target object ---
+        target_name = rt.getUserProp(ctrl, "ScatterTarget")
+        if target_name:
+            node = rt.getNodeByName(target_name)
+            if node and rt.isValidNode(node):
+                self.pending_target = node
+                group.target = node
+            else:
+                self.pending_target = None
+                group.target = None
+        else:
+            self.pending_target = None
+            group.target = None
         # --- Buttons / checkboxes ---
         mode = rt.getUserProp(ctrl, "ScatterMode")
         self.ui.button_spline.setChecked(mode == "spline")
@@ -164,17 +184,6 @@ class ScatterToolApp(QtWidgets.QMainWindow):
        
         val_box = rt.getUserProp(ctrl, "ScatterDisplayAsBox")
         self.ui.button_box.setChecked(val_box if isinstance(val_box, bool) else str(val_box).lower() == "true")
-
-        #test
-        children = [c for c in rt.children(ctrl) if rt.isValidNode(c) and c.layer == ctrl.layer]
-        if children:
-            self.manager.clear()
-            for child in children:
-                self.manager.add(child)
-            print(f"DEBUG: Repobladas {len(children)} instancias desde hijos en el layer {ctrl.layer.name}")
-        #test
-
-
 
         # --- Numeric parameters ---
         # Count
@@ -249,6 +258,7 @@ class ScatterToolApp(QtWidgets.QMainWindow):
         # --- Debug output ---
         print(f"DEBUG: Loaded group '{group.name}' with parameters:")
         print(f"  Mode: {mode}")
+        print(f"  target: {self.pending_target.name if self.pending_target else 'None'}")
         print(f"  Random: {random_enabled}")
         print(f"    scale: {proportional}")
         print(f"  Display as box: {self.ui.button_box.isChecked()}")
@@ -266,7 +276,7 @@ class ScatterToolApp(QtWidgets.QMainWindow):
             self.ui.spin_SyMax.setEnabled(False)
             self.ui.spin_SzMin.setEnabled(False)
             self.ui.spin_SzMax.setEnabled(False)     
-
+        self.update_ui_from_group(group)
 
 
     # --------------------------- Cleanup callback ---------------------------
@@ -274,7 +284,6 @@ class ScatterToolApp(QtWidgets.QMainWindow):
         if hasattr(self, 'sel_callback') and self.sel_callback:
             try:
                 rt.callbacks.removeScripts(rt.Name('selectionSetChanged'))
-                print("DEBUG: Selection callback removed successfully.")  # CAMBIO: debug
             except Exception as e:
                 print(f"Error removing callback: {e}")
   
@@ -282,24 +291,28 @@ class ScatterToolApp(QtWidgets.QMainWindow):
             del builtins.scattertool_app_instance
         super().closeEvent(event)
 
+    # --------------------------- Viewport display ---------------------------
+    def on_viewport_disp_changed(self, value):
+        if not self.current_group:
+            return
+        try:
+            self.current_group.set_viewport_display(value)
+            # guardar valor en userProp también
+            ctrl = self.current_group.controller
+            if ctrl and rt.isValidNode(ctrl):
+                rt.setUserProp(ctrl, "ScatterViewportDisplay", str(value))
+            print(f"DEBUG: Viewport display set to {value}% for group {self.current_group.name}")
+        except Exception as e:
+            print(f"ERROR: Failed to set viewport display -> {e}")
+    
+
      # --------------------------- Box / Mesh View ---------------------------# 
     def on_box_view(self,enable=True):
         """Toggle display as box for the currently selected group's instances."""
-        enable = self.ui.button_box.isChecked() if enable is None else enable
-        sel = list(rt.selection)
-        if not sel:
-            rt.messageBox(
-                "Select the group's dummy controller first.",
-                title="Scatter Tool Warning",
-                button=rt.name("ok"),
-                icon=rt.name("warning")
-            )
-            return
-        
-        obj = sel[0]
-        # search for the group that has this controller
-        group = self.scatter_tool.get_group_by_controller(obj)
+        # Find the group associated with the selected controller
+        group = self.scatter_tool.get_group_by_selection()
         if not group:
+            # Warn if no group found
             rt.messageBox(
                 "Select the group's dummy controller first.",
                 title="Scatter Tool Warning",
@@ -307,35 +320,45 @@ class ScatterToolApp(QtWidgets.QMainWindow):
                 icon=rt.name("warning")
             )
             return
-
-        print(f"DEBUG: on_box_view called. button_box={enable}")
-
-        ctrl = group.controller
-        if ctrl and rt.isValidNode(ctrl) and not group.manager.get_all():
-            children = [c for c in rt.children(ctrl) if rt.isValidNode(c) and c.layer == ctrl.layer]
-            if children:
-                for child in children:
-                    group.manager.add(child)
-                print(f"DEBUG: Repobladas {len(children)} instancias desde hijos en el layer {ctrl.layer.name}")
-
-        # set display mode
+        enable = self.ui.button_box.isChecked()  # get state from UI
+        # ---------------- SET DISPLAY MODE ----------------
         try:
             group.set_display_as_box(enable)
-            print(f"DEBUG: on_box_view -> Display mode changed to {'BOX' if enable else 'MESH'}")
-            self.ui.button_mesh.blockSignals(True)
-            self.ui.button_mesh.setChecked(not enable)
-            self.ui.button_mesh.blockSignals(False)
-        except Exception as e:
-            # revert update button states if fail
-            print(f"ERROR: set_display_as_box failed: {e}")
-            self.ui.button_box.blockSignals(True)
-            self.ui.button_box.setChecked(False)
-            self.ui.button_box.blockSignals(False)
+            # Save state directly in the group's params
+            group.params["display_as_box"] = enable
+            # Save it persistently in the controller's UserProp
+            ctrl = group.controller
+            if ctrl and rt.isValidNode(ctrl):
+                rt.setUserProp(ctrl, "ScatterDisplayAsBox", str(enable))
 
+            print(f"DEBUG:Display mode changed to {'BOX' if enable else 'MESH'}")
+
+            # Block signals from BOTH buttons to prevent listener loops
+            self.ui.button_box.blockSignals(True)
             self.ui.button_mesh.blockSignals(True)
+
+            # Sync UI with actual state
+            self.ui.button_box.setChecked(enable)
+            self.ui.button_mesh.setChecked(not enable)
+
+            # Unblock signals
+            self.ui.button_box.blockSignals(False)
+            self.ui.button_mesh.blockSignals(False)
+
+        except Exception as e:
+            self.ui.button_box.blockSignals(True)
+            print(f"ERROR: set_display_as_box failed: {e}")
+            # revert UI to MESH safely
+            self.ui.button_box.blockSignals(True)
+            self.ui.button_mesh.blockSignals(True)
+
+            self.ui.button_box.setChecked(False)
             self.ui.button_mesh.setChecked(True)
+
+            self.ui.button_box.blockSignals(False)
             self.ui.button_mesh.blockSignals(False)
             return
+
 
     # --------------------------- Pick spline / surface ---------------------------
     def on_pick_spline(self):
@@ -365,6 +388,10 @@ class ScatterToolApp(QtWidgets.QMainWindow):
         if picked_obj:
             self.manager.add(picked_obj)
             self.refresh_listview()
+            if self.current_group and rt.isValidNode(self.current_group.controller):
+                elements_names = [o.name for o in self.manager.get_all() if rt.isValidNode(o)]
+                rt.setUserProp(self.current_group.controller, "ScatterElements", ",".join(elements_names))
+                print(f"DEBUG: Updated ScatterElements userProp: {picked_obj}")
 
     def on_delete(self):
         selected_indexes = self.ui.ListElements.selectedIndexes()
@@ -374,6 +401,10 @@ class ScatterToolApp(QtWidgets.QMainWindow):
             if obj_to_remove:
                 self.manager.remove(obj_to_remove)
                 self.refresh_listview()
+                if self.current_group and rt.isValidNode(self.current_group.controller):
+                    elements_names = [o.name for o in self.manager.get_all() if rt.isValidNode(o)]
+                    rt.setUserProp(self.current_group.controller, "ScatterElements", ",".join(elements_names))
+                    print(f"DEBUG: Updated ScatterElements userProp: {obj_to_remove.name} was removed.")
 
     def on_replace(self):
         selected_indexes = self.ui.ListElements.selectedIndexes()
@@ -384,13 +415,21 @@ class ScatterToolApp(QtWidgets.QMainWindow):
             if old_obj:
                 self.manager.replace(old_obj, picked_obj)
                 self.refresh_listview()
+                if self.current_group and rt.isValidNode(self.current_group.controller):
+                    elements_names = [o.name for o in self.manager.get_all() if rt.isValidNode(o)]
+                    rt.setUserProp(self.current_group.controller, "ScatterElements", ",".join(elements_names))
+                    print(f"DEBUG: Updated ScatterElements userProp: {old_obj.name} was replaced by {picked_obj.name}  .")
 
     def on_add_list(self):
         selected_objs = list(rt.selection)
         if selected_objs:
             self.manager.add_many(selected_objs)
             self.refresh_listview()
-    
+            if self.current_group and rt.isValidNode(self.current_group.controller):
+                elements_names = [o.name for o in self.manager.get_all() if rt.isValidNode(o)]
+                rt.setUserProp(self.current_group.controller, "ScatterElements", ",".join(elements_names))
+                added_names = [o.name for o in selected_objs]
+                print(f"DEBUG: Updated ScatterElements userProp: the {added_names} were added.")
     # --------------------------- Randomization ---------------------------
 
     def on_shuffle_clicked(self):
@@ -436,6 +475,7 @@ class ScatterToolApp(QtWidgets.QMainWindow):
     # --------------------------- Launch scatter ---------------------------
 
     def on_update(self):
+        print("DEBUG: Starting scatter update...")#DEBUG
               
         source_obj = self.manager.get_random()
         if not source_obj:
@@ -498,8 +538,13 @@ class ScatterToolApp(QtWidgets.QMainWindow):
             #load manager and UI for this group
             self.manager = self.current_group.manager
             self.refresh_listview()
-        #------------- Update UI from current group -------------
-            self.update_ui_from_group(self.current_group)
+
+            target_name = rt.getUserProp(self.current_group.controller, "ScatterTarget")
+            self.pending_target = rt.getNodeByName(target_name) if target_name else None
+            if self.pending_target and rt.isValidNode(self.pending_target):
+                self.pending_mode = "spline" if rt.superClassOf(self.pending_target) == rt.Shape else "surface"
+            else:
+                self.pending_mode = None
         else:
             # If no group is selected, ensure we have a target and mode picked
             if self.current_group is None:
@@ -514,21 +559,17 @@ class ScatterToolApp(QtWidgets.QMainWindow):
                 print(f"DEBUG: Created new group: {self.current_group.name}")#DEBUG
                     
                 if self.current_group.manager is None:
-                    self.current_group.manager = self.manager   
-                    
-        # ------------- Update parameters and scatter -------------
+                    self.current_group.manager = self.manager  
+
+        # Update current group's params
         self.current_group.params.update(params_dict)
+        print(f"DEBUG: Updated group params: {self.current_group.params}")#DEBUG
+ 
 
         # Reposition controller to target center
         if self.pending_target and rt.isValidNode(self.pending_target):
             target_bb_min, target_bb_max = rt.nodeGetBoundingBox(self.pending_target, rt.matrix3(1))
             self.current_group.controller.position = (target_bb_min + target_bb_max) / 2
-        
-        # Set display mode
-        if mode == "spline":
-            self.current_group.scatter_spline(self.current_group.params["source_obj"])
-        else:
-            self.current_group.scatter_surface(self.current_group.params["source_obj"])
 
         # ------------------- SAVE TO CONTROLLER -------------------
         ctrl = self.current_group.controller 
@@ -556,7 +597,7 @@ class ScatterToolApp(QtWidgets.QMainWindow):
             rt.setUserProp(ctrl, "ScatterMode", mode)
                     # ------------------- DEBUG: Read back user props -------------------
             print("DEBUG: Saved userProps on controller:")
-            for prop in ["ScatterElements", "ScatterCount", "ScatterDistance",
+            for prop in ["ScatterTarget","ScatterElements", "ScatterCount", "ScatterDistance",
                         "ScatterPosJitter", "ScatterScaleX", "ScatterScaleY", "ScatterScaleZ",
                         "ScatterRotX", "ScatterRotY", "ScatterRotZ",
                         "ScatterProportionalScale", "ScatterRandom", "ScatterDisplayAsBox", "ScatterMode"]:
@@ -564,6 +605,68 @@ class ScatterToolApp(QtWidgets.QMainWindow):
                 print(f"  {prop}: {val}")
 
             print(f"DEBUG: Completed update for group: {self.current_group.name}")
+
+        # Set display mode
+        if mode == "spline":
+            self.current_group.scatter_spline(self.current_group.params["source_obj"])
+        else:
+            self.current_group.scatter_surface(self.current_group.params["source_obj"])
+        
+        #Freeze elements 
+        if self.current_group:
+            self.current_group.set_frozen_elements(freeze=True)
+
+    def update_ui_from_group(self, group):
+        if not group or not rt.isValidNode(group.controller):
+            return
+        
+        ctrl = group.controller
+
+        target_name = rt.getUserProp(ctrl, "ScatterTarget")
+        self.pending_target = rt.getNodeByName(target_name) if target_name else None
+
+        if not self.pending_target or not rt.isValidNode(self.pending_target):
+            print(f"DEBUG: Target node '{target_name}' not found in scene.")
+            self.ui.button_pickSpline.setText("Pick Spline")
+            self.ui.button_pickSurface.setText("Pick Surface")
+        else:
+            if rt.superClassOf(self.pending_target) == rt.Shape:
+                self.ui.button_pickSpline.setText(f"Spline: {self.pending_target.name}")
+                self.ui.button_spline.setChecked(True)
+                self.ui.button_surface.setChecked(False)
+            elif rt.isKindOf(self.pending_target, rt.GeometryClass):
+                self.ui.button_pickSurface.setText(f"Surface: {self.pending_target.name}")
+                self.ui.button_surface.setChecked(True)
+                self.ui.button_spline.setChecked(False)
+
+        p = group.params
+        # Spinners
+        self.ui.spin_elementCount.setValue(p.get("count", 0))
+        self.ui.spin_PxMin.setValue(p["pos_jitter"].x if "pos_jitter" in p else 0)
+        self.ui.spin_PyMin.setValue(p["pos_jitter"].y if "pos_jitter" in p else 0)
+        self.ui.spin_PzMin.setValue(p["pos_jitter"].z if "pos_jitter" in p else 0)
+        self.ui.spin_SxMin.setValue(int(p["scale_rangeX"][0]*100))
+        self.ui.spin_SxMax.setValue(int(p["scale_rangeX"][1]*100))
+        self.ui.spin_SyMin.setValue(int(p["scale_rangeY"][0]*100))
+        self.ui.spin_SyMax.setValue(int(p["scale_rangeY"][1]*100))
+        self.ui.spin_SzMin.setValue(int(p["scale_rangeZ"][0]*100))
+        self.ui.spin_SzMax.setValue(int(p["scale_rangeZ"][1]*100))
+        self.ui.spin_RxMin.setValue(p["rot_x_range"][0])
+        self.ui.spin_RxMax.setValue(p["rot_x_range"][1])
+        self.ui.spin_RyMin.setValue(p["rot_y_range"][0])
+        self.ui.spin_RyMax.setValue(p["rot_y_range"][1])
+        self.ui.spin_RzMin.setValue(p["rot_z_range"][0])
+        self.ui.spin_RzMax.setValue(p["rot_z_range"][1])
+
+        # Checkboxes
+        self.ui.checkBox_random.setChecked(p.get("random", True))
+        self.ui.checkBox_proportionalScale.setChecked(p.get("proportional_scale", True))
+
+        # Buttons
+        self.ui.button_spline.setChecked(group.spline is not None)
+        self.ui.button_surface.setChecked(group.surface is not None)
+        self.ui.button_box.setChecked(rt.getUserProp(group.controller,"ScatterDisplayAsBox")=="True")
+
 
 # --------------------------- Launch window ---------------------------            
 _WINDOW = None

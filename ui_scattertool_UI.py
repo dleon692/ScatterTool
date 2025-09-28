@@ -676,7 +676,7 @@ class Ui_ScatterToolUI(object):
         self.button_pickSpline.setText(QCoreApplication.translate("ScatterToolUI", u"Pick Spline", None))
         self.button_pickSurface.setText(QCoreApplication.translate("ScatterToolUI", u"Pick Surface", None))
         self.label_delements.setText(QCoreApplication.translate("ScatterToolUI", u"Distribute Elements", None))
-        self.pushButton_addList.setText(QCoreApplication.translate("ScatterToolUI", u"Add List", None))
+        self.pushButton_addList.setText(QCoreApplication.translate("ScatterToolUI", u"Add Selection", None))
         self.pushButton_add.setText(QCoreApplication.translate("ScatterToolUI", u"Add", None))
         self.pushButton_delete.setText(QCoreApplication.translate("ScatterToolUI", u"Delete", None))
         self.pushButton_replace.setText(QCoreApplication.translate("ScatterToolUI", u"Replace", None))
