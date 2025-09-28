@@ -172,7 +172,6 @@ class ScatterGroup:
     def set_display_as_box(self,enable=True):
         children = self.controller.children
         if not children:
-            print(f"DEBUG: No children found under controller '{self.name}'.")
             return
 
         for child in children:
@@ -180,7 +179,6 @@ class ScatterGroup:
                 child.boxMode = enable
             elif hasattr(child, "displayAsBox"):
                 child.displayAsBox = enable
-            print(f"DEBUG: Set displayAsBox={enable} for '{child.name}'")
 
         print(f"DEBUG: Display mode changed to {'BOX' if enable else 'MESH'} for all children of '{self.name}'")
 
@@ -202,6 +200,12 @@ class ScatterGroup:
             if not children:
                 print(f"DEBUG: No children found for '{self.name}'.")
                 return
+            #save in params
+            self.params["viewport_percentage"] = percentage
+
+            #save controller user prop
+            rt.setUserProp(self.controller, "ScatterViewportPercentage", str(percentage))
+
             child_count = len(children)
             if child_count == 0:
                 return
@@ -309,23 +313,32 @@ class ScatterGroup:
 
     def scatter_surface(self,source_obj):
         self.clear_instances(delete_nodes=True)
+
         if not (rt.isValidNode(source_obj) and rt.isValidNode(self.surface)):
-            print("ERROR: Select a source object and Editable Poly surface second.")
+            print("ERROR: Select a source object and Editable Poly surface.")
             return
+        
         if not rt.classof(self.surface) == rt.Editable_Poly:
-            print("ERROR: Surface must be an Editable Poly object.")
+            try:
+                self.surface = rt.convertToPoly(self.surface)
+                print(f"DEBUG: Converted: {self.surface.name} to Editable Poly.")
+            except Exception as e:
+                print(f"ERROR: Failed to convert surface to Editable Poly. {e}")
+                return
+        
+        count = self.params.get("count")
+        if count is None:
+            print("DEBUG: 'count' parameter is not defined. Scatter aborted.") #DEBUG
             return
         
         #determinate bounding box limit(surface)
         bb_min, bb_max = rt.nodeGetBoundingBox(self.surface, rt.matrix3(1))
         
-
         #determinate bounding box limit(object)
 
         source_bb_min, source_bb_max = rt.nodeGetBoundingBox(source_obj, rt.matrix3(1))
         source_size = source_bb_max - source_bb_min
         separation = max(source_size.x, source_size.y)
-
 
         #Get the mesh to access your faces
         mesh = rt.snapshotAsMesh(self.surface)
@@ -369,7 +382,10 @@ class ScatterGroup:
                     )
 
                     if inside:
-                        inst = rt.instance(source_obj)
+                        #get a random source object from the list
+                        random_source = self.manager.get_random() if hasattr(self,'manager') and self.manager.get_all() else source_obj
+                        #create instance
+                        inst = rt.instance(random_source)
                         inst.position = candidate
                         inst.parent = self.controller
                         self.layer.addNode(inst)
@@ -417,7 +433,8 @@ class ScatterTool:
                     "rot_y_range": (0,0),
                     "rot_z_range": (0,0),
                     "proportional_scale": rt.getUserProp(obj,"ScatterProportionalScale")=="True",
-                    "random": rt.getUserProp(obj,"ScatterRandom")=="True"
+                    "random": rt.getUserProp(obj,"ScatterRandom")=="True",
+                    "viewport_percentage": int(rt.getUserProp(obj,"ScatterViewportPercentage") or 100)
                     }
                     elements = rt.getUserProp(obj, "ScatterElements")
                     if elements:

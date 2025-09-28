@@ -239,7 +239,22 @@ class ScatterToolApp(QtWidgets.QMainWindow):
                 if obj_node and rt.isValidNode(obj_node):
                     self.manager.add(obj_node)
         
-        # --- Update internal params dict ---
+        #read viewport display percentage and apply
+        vp_prop = rt.getUserProp(ctrl, "ScatterViewportDisplay")
+        try:
+            vp_value = int(vp_prop) if vp_prop else 100
+        except ValueError:
+            vp_value = 100
+        group.params["viewport_percentage"] = vp_value
+
+        #update spinbox without triggering signal
+        try:
+            self.ui.spinBox_viewDisp.blockSignals(True)
+            self.ui.spinBox_viewDisp.setValue(vp_value)
+        finally:
+            self.ui.spinBox_viewDisp.blockSignals(False)
+
+         # --- Update internal params dict ---
         group.params.update({
             "count": self.ui.spin_elementCount.value(),
             "distance": float(distance) if distance else None,
@@ -256,19 +271,8 @@ class ScatterToolApp(QtWidgets.QMainWindow):
         })
 
         # --- Debug output ---
-        print(f"DEBUG: Loaded group '{group.name}' with parameters:")
-        print(f"  Mode: {mode}")
-        print(f"  target: {self.pending_target.name if self.pending_target else 'None'}")
-        print(f"  Random: {random_enabled}")
-        print(f"    scale: {proportional}")
-        print(f"  Display as box: {self.ui.button_box.isChecked()}")
-        print(f"  Count: {self.ui.spin_elementCount.value()}")
-        print(f"  Distance: {distance}")
-        print(f"  Pos jitter: {group.params['pos_jitter']}")
-        print(f"  Scale ranges: X{group.params['scale_rangeX']}, Y{group.params['scale_rangeY']}, Z{group.params['scale_rangeZ']}")
-        print(f"  Rotation ranges: X{group.params['rot_x_range']}, Y{group.params['rot_y_range']}, Z{group.params['rot_z_range']}")
-        print(f"  Source objects: {[obj.name for obj in self.manager.get_all()]}")
- 
+        print(f"DEBUG: Loaded group '{group.name}' with params: {group.params}")
+
         # --- Update spinboxes enabled/disabled according to random & proportional flags ---
         self.on_toggle_random(random_enabled) 
         if proportional and random_enabled:
@@ -296,8 +300,11 @@ class ScatterToolApp(QtWidgets.QMainWindow):
         if not self.current_group:
             return
         try:
+            #save value in params
+            self.current_group.params["viewport_percentage"] = value
+            # apply to current group
             self.current_group.set_viewport_display(value)
-            # guardar valor en userProp también
+            # save persistently in userProp
             ctrl = self.current_group.controller
             if ctrl and rt.isValidNode(ctrl):
                 rt.setUserProp(ctrl, "ScatterViewportDisplay", str(value))
@@ -312,13 +319,7 @@ class ScatterToolApp(QtWidgets.QMainWindow):
         # Find the group associated with the selected controller
         group = self.scatter_tool.get_group_by_selection()
         if not group:
-            # Warn if no group found
-            rt.messageBox(
-                "Select the group's dummy controller first.",
-                title="Scatter Tool Warning",
-                button=rt.name("ok"),
-                icon=rt.name("warning")
-            )
+            print("No valid scatter group selected.")
             return
         enable = self.ui.button_box.isChecked()  # get state from UI
         # ---------------- SET DISPLAY MODE ----------------
@@ -595,16 +596,6 @@ class ScatterToolApp(QtWidgets.QMainWindow):
             rt.setUserProp(ctrl, "ScatterProportionalScale", "True" if self.ui.checkBox_proportionalScale.isChecked() else "False")
             rt.setUserProp(ctrl, "ScatterDisplayAsBox", str(self.ui.button_box.isChecked()))
             rt.setUserProp(ctrl, "ScatterMode", mode)
-                    # ------------------- DEBUG: Read back user props -------------------
-            print("DEBUG: Saved userProps on controller:")
-            for prop in ["ScatterTarget","ScatterElements", "ScatterCount", "ScatterDistance",
-                        "ScatterPosJitter", "ScatterScaleX", "ScatterScaleY", "ScatterScaleZ",
-                        "ScatterRotX", "ScatterRotY", "ScatterRotZ",
-                        "ScatterProportionalScale", "ScatterRandom", "ScatterDisplayAsBox", "ScatterMode"]:
-                val = rt.getUserProp(ctrl, prop)
-                print(f"  {prop}: {val}")
-
-            print(f"DEBUG: Completed update for group: {self.current_group.name}")
 
         # Set display mode
         if mode == "spline":
@@ -617,56 +608,65 @@ class ScatterToolApp(QtWidgets.QMainWindow):
             self.current_group.set_frozen_elements(freeze=True)
 
     def update_ui_from_group(self, group):
-        if not group or not rt.isValidNode(group.controller):
-            return
-        
-        ctrl = group.controller
+            if not group or not rt.isValidNode(group.controller):
+                return
+            
+            ctrl = group.controller
 
-        target_name = rt.getUserProp(ctrl, "ScatterTarget")
-        self.pending_target = rt.getNodeByName(target_name) if target_name else None
+            target_name = rt.getUserProp(ctrl, "ScatterTarget")
+            self.pending_target = rt.getNodeByName(target_name) if target_name else None
 
-        if not self.pending_target or not rt.isValidNode(self.pending_target):
-            print(f"DEBUG: Target node '{target_name}' not found in scene.")
-            self.ui.button_pickSpline.setText("Pick Spline")
-            self.ui.button_pickSurface.setText("Pick Surface")
-        else:
-            if rt.superClassOf(self.pending_target) == rt.Shape:
-                self.ui.button_pickSpline.setText(f"Spline: {self.pending_target.name}")
-                self.ui.button_spline.setChecked(True)
-                self.ui.button_surface.setChecked(False)
-            elif rt.isKindOf(self.pending_target, rt.GeometryClass):
-                self.ui.button_pickSurface.setText(f"Surface: {self.pending_target.name}")
-                self.ui.button_surface.setChecked(True)
+            if not self.pending_target or not rt.isValidNode(self.pending_target):
+                print(f"DEBUG: Target node '{target_name}' not found in scene.")
+                self.ui.button_pickSpline.setText("Pick Spline")
+                self.ui.button_pickSurface.setText("Pick Surface")
+            else:
+                if rt.superClassOf(self.pending_target) == rt.Shape:
+                    self.ui.button_pickSpline.setText(f"Spline: {self.pending_target.name}")
+                    self.ui.button_spline.setChecked(True)
+                    self.ui.button_surface.setChecked(False)
+                elif rt.isKindOf(self.pending_target, rt.GeometryClass):
+                    self.ui.button_pickSurface.setText(f"Surface: {self.pending_target.name}")
+                    self.ui.button_surface.setChecked(True)
+                    self.ui.button_spline.setChecked(False)
+
+            p = group.params
+            # Spinners
+            self.ui.spin_elementCount.setValue(p.get("count", 0))
+            self.ui.spin_PxMin.setValue(p["pos_jitter"].x if "pos_jitter" in p else 0)
+            self.ui.spin_PyMin.setValue(p["pos_jitter"].y if "pos_jitter" in p else 0)
+            self.ui.spin_PzMin.setValue(p["pos_jitter"].z if "pos_jitter" in p else 0)
+            self.ui.spin_SxMin.setValue(int(p["scale_rangeX"][0]*100))
+            self.ui.spin_SxMax.setValue(int(p["scale_rangeX"][1]*100))
+            self.ui.spin_SyMin.setValue(int(p["scale_rangeY"][0]*100))
+            self.ui.spin_SyMax.setValue(int(p["scale_rangeY"][1]*100))
+            self.ui.spin_SzMin.setValue(int(p["scale_rangeZ"][0]*100))
+            self.ui.spin_SzMax.setValue(int(p["scale_rangeZ"][1]*100))
+            self.ui.spin_RxMin.setValue(p["rot_x_range"][0])
+            self.ui.spin_RxMax.setValue(p["rot_x_range"][1])
+            self.ui.spin_RyMin.setValue(p["rot_y_range"][0])
+            self.ui.spin_RyMax.setValue(p["rot_y_range"][1])
+            self.ui.spin_RzMin.setValue(p["rot_z_range"][0])
+            self.ui.spin_RzMax.setValue(p["rot_z_range"][1])
+
+            # Checkboxes
+            self.ui.checkBox_random.setChecked(p.get("random", True))
+            self.ui.checkBox_proportionalScale.setChecked(p.get("proportional_scale", True))
+
+            # Buttons
+            if group.target and rt.isValidNode(group.target):
+                if rt.superClassOf(group.target) == rt.Shape:
+                    self.ui.button_spline.setChecked(True)
+                    self.ui.button_surface.setChecked(False)
+                elif rt.isKindOf(group.target, rt.GeometryClass):
+                    self.ui.button_surface.setChecked(True)
+                    self.ui.button_spline.setChecked(False)
+            else:
                 self.ui.button_spline.setChecked(False)
+                self.ui.button_surface.setChecked(False)
+            self.ui.button_box.setChecked(rt.getUserProp(group.controller,"ScatterDisplayAsBox")=="True")
 
-        p = group.params
-        # Spinners
-        self.ui.spin_elementCount.setValue(p.get("count", 0))
-        self.ui.spin_PxMin.setValue(p["pos_jitter"].x if "pos_jitter" in p else 0)
-        self.ui.spin_PyMin.setValue(p["pos_jitter"].y if "pos_jitter" in p else 0)
-        self.ui.spin_PzMin.setValue(p["pos_jitter"].z if "pos_jitter" in p else 0)
-        self.ui.spin_SxMin.setValue(int(p["scale_rangeX"][0]*100))
-        self.ui.spin_SxMax.setValue(int(p["scale_rangeX"][1]*100))
-        self.ui.spin_SyMin.setValue(int(p["scale_rangeY"][0]*100))
-        self.ui.spin_SyMax.setValue(int(p["scale_rangeY"][1]*100))
-        self.ui.spin_SzMin.setValue(int(p["scale_rangeZ"][0]*100))
-        self.ui.spin_SzMax.setValue(int(p["scale_rangeZ"][1]*100))
-        self.ui.spin_RxMin.setValue(p["rot_x_range"][0])
-        self.ui.spin_RxMax.setValue(p["rot_x_range"][1])
-        self.ui.spin_RyMin.setValue(p["rot_y_range"][0])
-        self.ui.spin_RyMax.setValue(p["rot_y_range"][1])
-        self.ui.spin_RzMin.setValue(p["rot_z_range"][0])
-        self.ui.spin_RzMax.setValue(p["rot_z_range"][1])
-
-        # Checkboxes
-        self.ui.checkBox_random.setChecked(p.get("random", True))
-        self.ui.checkBox_proportionalScale.setChecked(p.get("proportional_scale", True))
-
-        # Buttons
-        self.ui.button_spline.setChecked(group.spline is not None)
-        self.ui.button_surface.setChecked(group.surface is not None)
-        self.ui.button_box.setChecked(rt.getUserProp(group.controller,"ScatterDisplayAsBox")=="True")
-
+       
 
 # --------------------------- Launch window ---------------------------            
 _WINDOW = None
