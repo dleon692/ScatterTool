@@ -343,7 +343,6 @@ class ScatterGroup:
         #Get the mesh to access your faces
         mesh = rt.snapshotAsMesh(self.surface)
         face_count = mesh.numfaces
-
     
         created = 0
         attempts = 0
@@ -361,7 +360,7 @@ class ScatterGroup:
             candidate = rt.point3(rand_x, rand_y, rand_z)
 
             # check if the object is very close to each other
-            if any(rt.length(candidate - self.params) < separation for self.params in placed_points):
+            if any(rt.length(candidate - pt) < separation for pt in placed_points):
                 continue
 
             for i in range(1, face_count + 1):
@@ -393,6 +392,7 @@ class ScatterGroup:
                         self.apply_random_scale_and_rotation(inst)
                         self.instances.append(ScatterInstance(inst))
                         created += 1
+                        placed_points.append(candidate)
                         break
                 except Exception as e:
                     print(f"Error on face {i}: {e}")
