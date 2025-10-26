@@ -22,9 +22,11 @@ class ScatterToolApp(QtWidgets.QMainWindow):
         self.distribution_group = QButtonGroup(self)
         self.distribution_group.addButton(self.ui.button_spline)
         self.distribution_group.addButton(self.ui.button_surface)
+        self.distribution_group.addButton(self.ui.button_painter)
         self.distribution_group.setExclusive(True)
         self.ui.button_spline.toggled.connect(self.mode_buttons)
         self.ui.button_surface.toggled.connect(self.mode_buttons)
+        self.ui.button_painter.toggled.connect(self.mode_buttons)
 
         self.pending_target = None   #temp target object before creating the group
         self.pending_mode = None     #temp mode before creating the group
@@ -46,8 +48,39 @@ class ScatterToolApp(QtWidgets.QMainWindow):
         self.ui.button_spline.setChecked(True)
         self.ui.button_mesh.setChecked(True)
 
+        #------------------test activate mouse picker for painter mode------------------
+        self.brush_active = False
+        self._mouse_pressed = False
+        self._brush_timer = QtCore.QTimer()
+        self._brush_timer.setInterval(50)  # frecuencia de ticks (ms), puedes ajustar
+        self._brush_timer.timeout.connect(self._brush_tick)
+        #-----------------------------------------------------------------------------------------------------------
+
+        #distribution mode buttons
+        self.ui.button_elementCount.toggled.connect(self.on_distribution_mode_changed)
+        self.ui.button_distance.toggled.connect(self.on_distribution_mode_changed)
+
+        #default distribution mode
+        
+        self.ui.button_elementCount.setChecked(True)
+        self.on_distribution_mode_changed()
+
         #default count
         self.ui.spin_elementCount.setValue(5)
+
+        #default distance
+        self.ui.spin_distance.setValue(50)
+
+        #default brush size
+        self.ui.spin_brush.setValue(100)
+
+        #default slider direction
+        self.ui.horizontalSlider_direction.setValue(100)
+        slider_value = self.ui.horizontalSlider_direction.value()
+        self.ui.spinBox_direction.setValue(slider_value)
+        self.ui.horizontalSlider_direction.valueChanged.connect(
+            lambda value: self.ui.spinBox_direction.setValue(value)
+        )
 
         #default viewport display 
         self.ui.spinBox_viewDisp.setValue(100)
@@ -61,17 +94,29 @@ class ScatterToolApp(QtWidgets.QMainWindow):
         self.model = QStringListModel()
         self.ui.ListElements.setModel(self.model)
 
+        #set collition radius default
+        self.ui.checkBox_collision.setChecked(True)
+        self.ui.spinBox_colRadius.setValue(100)
+
         # turn off randomization controls by default
         self.ui.checkBox_random.setChecked(False)
         self.on_toggle_random(False)
         self.ui.checkBox_random.stateChanged.connect(lambda state: self.on_toggle_random(state == 2))
         self.ui.checkBox_proportionalScale.stateChanged.connect(self.on_toggle_random)
         self.ui.checkBox_proportionalScale.setChecked(True)
+
+        # ---------------- Collision widgets ----------------
+        self.ui.checkBox_collision.stateChanged.connect(self.on_collision_changed)
+        self.ui.spinBox_colRadius.valueChanged.connect(self.on_collision_changed)
+
         #default scale values
         self.ui.spin_SxMin.setValue(100)
         self.ui.spin_SxMax.setValue(100)
 
         self.setup_connections()
+
+        #test setup brush callbacks
+        self._setup_brush_callbacks()
 
         #selection callback
         try:
@@ -108,19 +153,160 @@ class ScatterToolApp(QtWidgets.QMainWindow):
         self.ui.pushButton_replace.clicked.connect(self.on_replace)
         self.ui.pushButton_addList.clicked.connect(self.on_add_list)
         self.ui.button_shuffle.clicked.connect(self.on_shuffle_clicked)
+        self.ui.horizontalSlider_direction.valueChanged.connect(self.on_direction_changed)
         self.ui.Button_update.clicked.connect(self.on_update)
         self.ui.spinBox_viewDisp.valueChanged.connect(self.on_viewport_disp_changed)
     
    # --------------------------- Mode buttons ---------------------------
 
     def mode_buttons(self):
-        if self.ui.button_spline.isChecked():
-            self.ui.button_pickSpline.setEnabled(True)
-            self.ui.button_pickSurface.setEnabled(False)
-             
-        else:
+         # reset buttons
+        widgets_to_enable = [
+            self.ui.spin_brush, self.ui.label_brushSize,
+            self.ui.button_pickSpline, self.ui.button_pickSurface,
+            self.ui.button_distance, self.ui.spin_distance,
+            self.ui.button_elementCount, self.ui.spin_elementCount,
+            self.ui.spin_PxMin, self.ui.spin_PxMax,
+            self.ui.spin_PyMin, self.ui.spin_PyMax,
+            self.ui.spin_PzMin, self.ui.spin_PzMax,
+            self.ui.spin_RxMin, self.ui.spin_RxMax,
+            self.ui.spin_RyMin, self.ui.spin_RyMax,
+            self.ui.spin_RzMin, self.ui.spin_RzMax,
+            self.ui.spin_SxMin, self.ui.spin_SxMax,
+            self.ui.spin_SyMin, self.ui.spin_SyMax,
+            self.ui.spin_SzMin, self.ui.spin_SzMax
+        ]
+        for w in widgets_to_enable:
+            w.setEnabled(True)
+     
+        #surface mode
+        if self.ui.button_surface.isChecked():
+
             self.ui.button_pickSurface.setEnabled(True)
             self.ui.button_pickSpline.setEnabled(False)
+
+            #disable distribution mode not applicable to surface
+            self.ui.button_distance.setEnabled(False)
+            self.ui.spin_distance.setEnabled(False)
+
+            self.ui.label_brushSize.setEnabled(False)
+            self.ui.spin_brush.setEnabled(False)
+
+            #position jitter disable
+            for w in (self.ui.spin_PxMin, self.ui.spin_PxMax,
+                  self.ui.spin_PyMin, self.ui.spin_PyMax,
+                  self.ui.spin_PzMin, self.ui.spin_PzMax):
+                w.setEnabled(False) 
+
+         #spline mode
+        elif self.ui.button_spline.isChecked():
+            self.ui.button_pickSpline.setEnabled(True)
+            self.ui.button_pickSurface.setEnabled(False)
+
+            # enable distribution
+            self.ui.button_distance.setEnabled(True)
+            self.ui.spin_distance.setEnabled(self.ui.button_distance.isChecked())
+            self.ui.button_elementCount.setEnabled(True)
+            self.ui.spin_elementCount.setEnabled(self.ui.button_elementCount.isChecked())
+
+            self.ui.label_brushSize.setEnabled(False)
+            self.ui.spin_brush.setEnabled(False)
+        
+        #painter mode
+        elif self.ui.button_painter.isChecked():
+            self.ui.button_pickSpline.setEnabled(False)
+            self.ui.button_pickSurface.setEnabled(False)
+
+            #disable distribution modes not applicable to painter
+
+            self.ui.button_distance.setEnabled(False)
+            self.ui.spin_distance.setEnabled(False)
+            self.ui.button_elementCount.setEnabled(False)
+            self.ui.spin_elementCount.setEnabled(False)
+            # enable brush
+            self.ui.spin_brush.setEnabled(True)
+            self.ui.label_brushSize.setEnabled(True)
+
+        self.on_toggle_random(self.ui.checkBox_random.isChecked())
+    #--------------------------- test funtions for painter mode ---------------------------
+
+    def _setup_brush_callbacks(self):
+        """Setup mouse down/up callbacks for painter mode."""
+        try:
+            ms_script_down = (
+                'app = getattr(builtins, "scattertool_app_instance", None); '
+                'import traceback; '
+                'try: '
+                '    if app: app._on_mouse_down() '
+                'except Exception: '
+                '    print(traceback.format_exc())'
+            )
+            ms_script_up = (
+                'app = getattr(builtins, "scattertool_app_instance", None); '
+                'import traceback; '
+                'try: '
+                '    if app: app._on_mouse_up() '
+                'except Exception: '
+                '    print(traceback.format_exc())'
+            )
+
+            self._cb_mouse_down = rt.callbacks.addScript(rt.Name("mouseButtonDown"), ms_script_down)
+            self._cb_mouse_up = rt.callbacks.addScript(rt.Name("mouseButtonUp"), ms_script_up)
+        except Exception as e:
+            print(f"ERROR: Cannot setup brush callbacks: {e}")
+    def _on_mouse_down(self):
+        if self.ui.button_painter.isChecked():
+            self._mouse_pressed = True
+            if not self._brush_timer.isActive():
+                self._brush_timer.start()
+
+    def _on_mouse_up(self):
+        self._mouse_pressed = False
+        self._brush_active = False
+        if self._brush_timer.isActive():
+            self._brush_timer.stop()
+
+    def _brush_tick(self):
+        if not self._mouse_pressed or not self.ui.button_painter.isChecked():
+            return
+
+        surface, hit_point = self._get_surface_hit_point()
+        if not surface or not hit_point:
+            return
+
+        source_obj = self.manager.get_random()
+        if not source_obj:
+            return
+
+        if not self.current_group:
+            # Crear grupo temporal si no existe
+            self.current_group = self.scatter_tool.create_group(
+                source_obj=source_obj,
+                target_obj=surface,
+                mode="painter"
+            )
+            self.current_group.manager = self.manager
+
+        brush_radius = self.ui.spin_brush.value()
+        density = 5  # cantidad de instancias por tick
+        self.current_group.scatter_painter(hit_point, brush_radius, density=density)
+#--------------------------- test funtions for painter mode ---------------------------
+
+
+
+    def _valid_surface_selected(self):
+        return self.pending_target and rt.isKindOf(self.pending_target, rt.GeometryClass)
+
+    def _get_surface_hit_point(self):
+        """Devuelve superficie y punto de impacto bajo el cursor"""
+        try:
+            surface = self.pending_target if self._valid_surface_selected() else None
+            if surface:
+                hit_point = self.current_group.get_random_point_on_surface(surface) if self.current_group else None
+                return surface, hit_point
+        except Exception as e:
+            print(f"DEBUG: Error get_surface_hit_point: {e}")
+        return None, None
 
     # --------------------------- Selection callback ---------------------------
     @staticmethod
@@ -173,6 +359,8 @@ class ScatterToolApp(QtWidgets.QMainWindow):
         mode = rt.getUserProp(ctrl, "ScatterMode")
         self.ui.button_spline.setChecked(mode == "spline")
         self.ui.button_surface.setChecked(mode == "surface")
+        self.ui.button_painter.setChecked(mode == "painter")
+
         # --- Checkboxes ---
         val_random = rt.getUserProp(ctrl, "ScatterRandom")
         random_enabled = val_random if isinstance(val_random, bool) else str(val_random).lower() == "true"
@@ -185,6 +373,11 @@ class ScatterToolApp(QtWidgets.QMainWindow):
         val_box = rt.getUserProp(ctrl, "ScatterDisplayAsBox")
         self.ui.button_box.setChecked(val_box if isinstance(val_box, bool) else str(val_box).lower() == "true")
 
+        val_coll_enabled = rt.getUserProp(ctrl, "ScatterCollisionEnabled")
+        coll=val_coll_enabled if isinstance(val_coll_enabled, bool) else str(val_coll_enabled).lower() == "true"
+        self.ui.checkBox_collision.setChecked(coll)
+
+
         # --- Numeric parameters ---
         # Count
         count = rt.getUserProp(ctrl, "ScatterCount")
@@ -193,20 +386,41 @@ class ScatterToolApp(QtWidgets.QMainWindow):
         
         # Distance
         distance = rt.getUserProp(ctrl, "ScatterDistance")
-        # TODO: if you have a spinbox for distance, set it here
+        if distance:
+            self.ui.spin_distance.setValue(float(distance))
+        
+        # Brush size
+        size_brush = rt.getUserProp(ctrl, "ScatterBrushSize")
+        if size_brush:
+            self.ui.spin_brush.setValue(float(size_brush))
 
+        #collision radius
+        coll_radius = rt.getUserProp(ctrl, "ScatterCollisionRadius")
+        if coll_radius:
+            self.ui.spinBox_colRadius.setValue(int(coll_radius) if coll_radius else 100)
+
+        #direction slider
+        direction_value = rt.getUserProp(ctrl, "direction_value")
+        if direction_value:
+            self.ui.horizontalSlider_direction.setValue(int(direction_value))
+            self.ui.spinBox_direction.setValue(int(direction_value))
+###########################TEST
         # Position jitter
-        pos_jitter = rt.getUserProp(ctrl, "ScatterPosJitter")
-        if pos_jitter:
-            x, y, z = map(float, pos_jitter.split(","))
-            self.ui.spin_PxMin.setValue(x)
-            self.ui.spin_PxMax.setValue(x)
-            self.ui.spin_PyMin.setValue(y)
-            self.ui.spin_PyMax.setValue(y)
-            self.ui.spin_PzMin.setValue(z)
-            self.ui.spin_PzMax.setValue(z)
+        pos_jitterX = rt.getUserProp(ctrl, "ScatterPosJitterX")
+        x_min, x_max = map(float, pos_jitterX.split(","))
+        self.ui.spin_PxMin.setValue(int(x_min))
+        self.ui.spin_PxMax.setValue(int(x_max))
 
-        # Scale ranges
+        pos_jitterY = rt.getUserProp(ctrl, "ScatterPosJitterY")
+        y_min, y_max = map(float, pos_jitterY.split(","))
+        self.ui.spin_PyMin.setValue(int(y_min))
+        self.ui.spin_PyMax.setValue(int(y_max))
+
+        pos_jitterZ = rt.getUserProp(ctrl, "ScatterPosJitterZ")
+        z_min, z_max = map(float, pos_jitterZ.split(","))
+        self.ui.spin_PzMin.setValue(int(z_min))
+        self.ui.spin_PzMax.setValue(int(z_max))
+                # Scale ranges
         for axis, spin_min, spin_max, prop in [
             ("X", self.ui.spin_SxMin, self.ui.spin_SxMax, "ScatterScaleX"),
             ("Y", self.ui.spin_SyMin, self.ui.spin_SyMax, "ScatterScaleY"),
@@ -257,14 +471,18 @@ class ScatterToolApp(QtWidgets.QMainWindow):
          # --- Update internal params dict ---
         group.params.update({
             "count": self.ui.spin_elementCount.value(),
-            "distance": float(distance) if distance else None,
-            "pos_jitter": rt.point3(self.ui.spin_PxMin.value(), self.ui.spin_PyMin.value(), self.ui.spin_PzMin.value()),
+            "distance": self.ui.spin_distance.value(),
+            "brush_size": self.ui.spin_brush.value(),
+            "pos_jitterX": (self.ui.spin_PxMin.value(), self.ui.spin_PxMax.value()),
+            "pos_jitterY": (self.ui.spin_PyMin.value(), self.ui.spin_PyMax.value()),
+            "pos_jitterZ": (self.ui.spin_PzMin.value(), self.ui.spin_PzMax.value()),
             "scale_rangeX": (self.ui.spin_SxMin.value()/100, self.ui.spin_SxMax.value()/100),
             "scale_rangeY": (self.ui.spin_SyMin.value()/100, self.ui.spin_SyMax.value()/100),
             "scale_rangeZ": (self.ui.spin_SzMin.value()/100, self.ui.spin_SzMax.value()/100),
             "rot_x_range": (self.ui.spin_RxMin.value(), self.ui.spin_RxMax.value()),
             "rot_y_range": (self.ui.spin_RyMin.value(), self.ui.spin_RyMax.value()),
             "rot_z_range": (self.ui.spin_RzMin.value(), self.ui.spin_RzMax.value()),
+            "orientation_value": self.ui.horizontalSlider_direction.value(),
             "source_obj": self.manager.get_random(),
             "proportional_scale": proportional,
             "random": random_enabled
@@ -281,6 +499,9 @@ class ScatterToolApp(QtWidgets.QMainWindow):
             self.ui.spin_SzMin.setEnabled(False)
             self.ui.spin_SzMax.setEnabled(False)     
         self.update_ui_from_group(group)
+        
+        #update group name
+        self.show_group_name()
 
 
     # --------------------------- Cleanup callback ---------------------------
@@ -322,6 +543,7 @@ class ScatterToolApp(QtWidgets.QMainWindow):
             print("No valid scatter group selected.")
             return
         enable = self.ui.button_box.isChecked()  # get state from UI
+
         # ---------------- SET DISPLAY MODE ----------------
         try:
             group.set_display_as_box(enable)
@@ -381,7 +603,65 @@ class ScatterToolApp(QtWidgets.QMainWindow):
             self.ui.button_pickSurface.setText(f"Surface: {surface.name}")  
         else:
             self.ui.button_pickSurface.setText("ERROR:Select a valid Surface.")
-    
+
+    #---------------------------distribution mode selection ---------------------------
+    def on_distribution_mode_changed(self):
+        if self.ui.button_distance.isChecked():
+            self.ui.button_elementCount.blockSignals(True)
+            self.ui.button_elementCount.setChecked(False)
+            self.ui.button_elementCount.blockSignals(False)
+
+            self.ui.spin_elementCount.setEnabled(False)
+            self.ui.spin_distance.setEnabled(True)
+
+        elif self.ui.button_elementCount.isChecked():
+
+            self.ui.button_distance.blockSignals(True)
+            self.ui.button_distance.setChecked(False)
+            self.ui.button_distance.blockSignals(False)
+
+            self.ui.spin_elementCount.setEnabled(True)
+            self.ui.spin_distance.setEnabled(False)
+
+        else:
+            self.ui.button_elementCount.blockSignals(True)
+            self.ui.button_elementCount.setChecked(True)
+            self.ui.button_elementCount.blockSignals(False)
+            
+            self.ui.spin_distance.setEnabled(True)
+            self.ui.spin_elementCount.setEnabled(False)
+
+    #show current group name in the window title
+    def show_group_name(self):
+        sel = rt.selection
+        print(f"DEBUG: Current selection = {[obj.name for obj in sel]}") 
+        if not sel or len(sel) == 0:
+            self.ui.scattergroupname.setText("")
+            self.ui.colorbox.setStyleSheet(
+                "QFrame {background-color: rgb(45, 45, 45); border: 1px solid; border-radius: 4px;}"
+            )
+            print("DEBUG: No selection")
+            return
+
+        obj = sel[0]
+        print(f"DEBUG: Selected object = {obj.name}")  # debug objeto seleccionado
+        group = self.scatter_tool.get_group_by_controller(obj)  # <-- usa la función del ScatterTool
+        if group:
+            print(f"DEBUG: Found group = {group.name}")  # debug grupo encontrado
+        else:
+            print("DEBUG: No group found for selected object")  # debug no se encontró grupo
+        if group and rt.isValidNode(group.controller):
+            self.ui.scattergroupname.setText(group.name)
+            color = group.controller.wirecolor
+            rgb = f"rgb({color.r},{color.g},{color.b})"
+            self.ui.colorbox.setStyleSheet(
+                f"QFrame {{background-color: {rgb}; border: 1px solid; border-radius: 4px;}}"
+            )
+        else:
+            self.ui.scattergroupname.setText("")
+            self.ui.colorbox.setStyleSheet(
+                "QFrame {background-color: rgb(45, 45, 45); border: 1px solid; border-radius: 4px;}"
+            )
     # --------------------------- Elements list management ---------------------------
 
     def on_add(self):
@@ -434,26 +714,27 @@ class ScatterToolApp(QtWidgets.QMainWindow):
     # --------------------------- Randomization ---------------------------
 
     def on_shuffle_clicked(self):
-        elements = self.manager.get_all()
-        if not elements:
-            print("No elements to shuffle.")
+        if not self.current_group:
+            print("No current group to shuffle.")
             return
-        random.shuffle(elements)
-        self.manager.elements = elements
-        self.refresh_listview()
-        print("Elements shuffled.")
-    # Enable/disable randomization controls based on checkbox state
-    
+        self.current_group.shuffle_instances()
+        
     def on_toggle_random(self,enabled):
         enabled= self.ui.checkBox_random.isChecked()
 
+        #get mode
+        surface_or_painter_mode= self.ui.button_surface.isChecked() or self.ui.button_painter.isChecked()
+        #determine if position jitter controls should be enabled
+        enable_position= enabled and not surface_or_painter_mode
+    
+
         self.ui.button_shuffle.setEnabled(enabled)
-        self.ui.spin_PxMin.setEnabled(enabled)
-        self.ui.spin_PxMax.setEnabled(enabled)
-        self.ui.spin_PyMin.setEnabled(enabled)
-        self.ui.spin_PyMax.setEnabled(enabled)
-        self.ui.spin_PzMin.setEnabled(enabled)
-        self.ui.spin_PzMax.setEnabled(enabled)
+        self.ui.spin_PxMin.setEnabled(enable_position)
+        self.ui.spin_PxMax.setEnabled(enable_position)
+        self.ui.spin_PyMin.setEnabled(enable_position)
+        self.ui.spin_PyMax.setEnabled(enable_position)
+        self.ui.spin_PzMin.setEnabled(enable_position)
+        self.ui.spin_PzMax.setEnabled(enable_position)
         self.ui.spin_RxMin.setEnabled(enabled)
         self.ui.spin_RxMax.setEnabled(enabled)
         self.ui.spin_RyMin.setEnabled(enabled)
@@ -473,6 +754,42 @@ class ScatterToolApp(QtWidgets.QMainWindow):
             self.ui.spin_SzMin.setEnabled(enabled)
             self.ui.spin_SzMax.setEnabled(enabled)
 
+    # ---------------------------collision detection ---------------------------
+    def on_collision_changed(self):
+        if not self.current_group or not rt.isValidNode(self.current_group.controller):
+            return
+        
+        ctrl = self.current_group.controller
+        collision_enabled = self.ui.checkBox_collision.isChecked()
+        collision_radius = self.ui.spinBox_colRadius.value()
+        
+        # save in current group's params
+        self.current_group.params["collision_enabled"] = collision_enabled
+        self.current_group.params["collision_radius"] = collision_radius
+
+        # save persistently in userProps
+        rt.setUserProp(ctrl, "ScatterCollisionEnabled", str(collision_enabled))
+        rt.setUserProp(ctrl, "ScatterCollisionRadius", str(collision_radius))
+        
+        print(f"DEBUG: Collision updated -> Enabled: {collision_enabled}, Radius: {collision_radius}")
+
+    
+    # --------------------------- Direction slider ---------------------------
+
+    def on_direction_changed(self, value):
+    #DEBUG-NORMAL
+    
+       # update slider and spinbox values
+        self.ui.spinBox_direction.blockSignals(True)
+        self.ui.spinBox_direction.setValue(value)
+        self.ui.spinBox_direction.blockSignals(False)
+
+        # save in current group's params
+        if hasattr(self, "current_group") and self.current_group:
+            self.current_group.params["direction_value"] = value
+
+            self.current_group. normal_direction(value)
+
     # --------------------------- Launch scatter ---------------------------
 
     def on_update(self):
@@ -483,17 +800,25 @@ class ScatterToolApp(QtWidgets.QMainWindow):
             print("No source object selected.")
             return
         
-        mode = "spline" if self.ui.button_spline.isChecked() else "surface"
+        # determine mode: spline, painter or surface
+        if self.ui.button_spline.isChecked():
+            mode = "spline"
+        elif self.ui.button_painter.isChecked():
+            mode = "painter"
+        else:
+            mode = "surface"
+
         # ------------- Gather parameters from UI -------------
-        count = self.ui.spin_elementCount.value()
-        distance = None  # Opcional: self.ui.spinBox_distance.value()
- 
+        count = self.ui.spin_elementCount.value() if self.ui.button_elementCount.isChecked() else None
+        distance = self.ui.spin_distance.value() if self.ui.button_distance.isChecked() else None
+        brush_size = self.ui.spin_brush.value()
+      
         #check if randomization is False
         if self.ui.checkBox_random.isChecked():
-            pos_jitterX = random.uniform(self.ui.spin_PxMin.value(), self.ui.spin_PxMax.value())
-            pos_jitterY = random.uniform(self.ui.spin_PyMin.value(), self.ui.spin_PyMax.value())
-            pos_jitterZ = random.uniform(self.ui.spin_PzMin.value(), self.ui.spin_PzMax.value())
-
+            pos_jitterX = (self.ui.spin_PxMin.value(), self.ui.spin_PxMax.value())
+            pos_jitterY = (self.ui.spin_PyMin.value(), self.ui.spin_PyMax.value())
+            pos_jitterZ = (self.ui.spin_PzMin.value(), self.ui.spin_PzMax.value())
+        
 
             proportional = self.ui.checkBox_proportionalScale.isChecked()
             if proportional:
@@ -509,7 +834,7 @@ class ScatterToolApp(QtWidgets.QMainWindow):
             rot_y_range = (self.ui.spin_RyMin.value(), self.ui.spin_RyMax.value())
             rot_z_range = (self.ui.spin_RzMin.value(), self.ui.spin_RzMax.value())
         else:
-            pos_jitterX = pos_jitterY = pos_jitterZ = 0.0
+            pos_jitterX = pos_jitterY = pos_jitterZ = (0.0, 0.0)
             scale_rangeX = scale_rangeY = scale_rangeZ = (1.0, 1.0)
             rot_x_range = rot_y_range = rot_z_range = (0.0, 0.0)
             proportional = False  # default to proportional if random is off 
@@ -518,7 +843,10 @@ class ScatterToolApp(QtWidgets.QMainWindow):
         params_dict={
             "count": count,
             "distance": distance,
-            "pos_jitter": rt.point3(pos_jitterX, pos_jitterY, pos_jitterZ),
+            "brush_size": brush_size,
+            "pos_jitterX": pos_jitterX,
+            "pos_jitterY": pos_jitterY,
+            "pos_jitterZ": pos_jitterZ,
             "scale_rangeX": scale_rangeX,
             "scale_rangeY": scale_rangeY,
             "scale_rangeZ": scale_rangeZ,
@@ -526,7 +854,10 @@ class ScatterToolApp(QtWidgets.QMainWindow):
             "rot_y_range": rot_y_range,
             "rot_z_range": rot_z_range,
             "source_obj": source_obj,
-            "proportional_scale": proportional
+            "proportional_scale": proportional,
+            "collision_enabled": self.ui.checkBox_collision.isChecked(),
+            "collision_radius": self.ui.spinBox_colRadius.value(),
+            "orientation_value": self.ui.horizontalSlider_direction.value(),
         }
        
         # Check if there's a selected group in the scene
@@ -544,6 +875,9 @@ class ScatterToolApp(QtWidgets.QMainWindow):
             self.pending_target = rt.getNodeByName(target_name) if target_name else None
             if self.pending_target and rt.isValidNode(self.pending_target):
                 self.pending_mode = "spline" if rt.superClassOf(self.pending_target) == rt.Shape else "surface"
+            elif self.ui.button_painter.isChecked():
+                self.pending_mode = "painter"
+                self.pending_target = None
             else:
                 self.pending_mode = None
         else:
@@ -557,6 +891,9 @@ class ScatterToolApp(QtWidgets.QMainWindow):
                     target_obj=self.pending_target,
                     mode=mode
                 ) #placeholder to avoid errors
+
+                 #update group name
+                self.show_group_name()
                 print(f"DEBUG: Created new group: {self.current_group.name}")#DEBUG
                     
                 if self.current_group.manager is None:
@@ -584,15 +921,21 @@ class ScatterToolApp(QtWidgets.QMainWindow):
             #save other parameters in user props
             rt.setUserProp(ctrl, "ScatterCount", str(count))                              
             rt.setUserProp(ctrl, "ScatterDistance", str(distance) if distance else "")    
-            rt.setUserProp(ctrl, "ScatterPosJitter", f"{pos_jitterX},{pos_jitterY},{pos_jitterZ}") 
+            rt.setUserProp(ctrl, "ScatterPosJitterX", f"{pos_jitterX[0]},{pos_jitterX[1]}")
+            rt.setUserProp(ctrl, "ScatterPosJitterY", f"{pos_jitterY[0]},{pos_jitterY[1]}")
+            rt.setUserProp(ctrl, "ScatterPosJitterZ", f"{pos_jitterZ[0]},{pos_jitterZ[1]}") 
             rt.setUserProp(ctrl, "ScatterScaleX", f"{scale_rangeX[0]},{scale_rangeX[1]}") 
             rt.setUserProp(ctrl, "ScatterScaleY", f"{scale_rangeY[0]},{scale_rangeY[1]}") 
             rt.setUserProp(ctrl, "ScatterScaleZ", f"{scale_rangeZ[0]},{scale_rangeZ[1]}") 
             rt.setUserProp(ctrl, "ScatterRotX", f"{rot_x_range[0]},{rot_x_range[1]}")     
             rt.setUserProp(ctrl, "ScatterRotY", f"{rot_y_range[0]},{rot_y_range[1]}")     
-            rt.setUserProp(ctrl, "ScatterRotZ", f"{rot_z_range[0]},{rot_z_range[1]}")     
+            rt.setUserProp(ctrl, "ScatterRotZ", f"{rot_z_range[0]},{rot_z_range[1]}")   
+            rt.setUserProp(ctrl, "ScatterBrushSize", str(brush_size))
+            rt.setUserProp(ctrl, "ScatterCollisionRadius", str(self.ui.spinBox_colRadius.value()))
+            rt.setUserProp(ctrl, "direction_value", str(self.ui.horizontalSlider_direction.value()))  
             #save button states / checkbox states
             rt.setUserProp(ctrl, "ScatterRandom", "True" if self.ui.checkBox_random.isChecked() else "False")
+            rt.setUserProp(ctrl, "ScatterCollisionEnabled", str(self.ui.checkBox_collision.isChecked()))
             rt.setUserProp(ctrl, "ScatterProportionalScale", "True" if self.ui.checkBox_proportionalScale.isChecked() else "False")
             rt.setUserProp(ctrl, "ScatterDisplayAsBox", str(self.ui.button_box.isChecked()))
             rt.setUserProp(ctrl, "ScatterMode", mode)
@@ -648,8 +991,14 @@ class ScatterToolApp(QtWidgets.QMainWindow):
             self.ui.spin_RyMax.setValue(p["rot_y_range"][1])
             self.ui.spin_RzMin.setValue(p["rot_z_range"][0])
             self.ui.spin_RzMax.setValue(p["rot_z_range"][1])
+            self.ui.spin_distance.setValue(p.get("distance", 0))
+            self.ui.spin_brush.setValue(p.get("brush_size", 0))
+            self.ui.horizontalSlider_direction.setValue(p.get("orientation_value", 0))
+            self.ui.spinBox_direction.setValue(p.get("orientation_value", 0))
+            self.ui.spinBox_colRadius.setValue(p.get("collision_radius", 100))
 
             # Checkboxes
+            self.ui.checkBox_collision.setChecked(p.get("collision_enabled", False))
             self.ui.checkBox_random.setChecked(p.get("random", True))
             self.ui.checkBox_proportionalScale.setChecked(p.get("proportional_scale", True))
 
@@ -661,10 +1010,16 @@ class ScatterToolApp(QtWidgets.QMainWindow):
                 elif rt.isKindOf(group.target, rt.GeometryClass):
                     self.ui.button_surface.setChecked(True)
                     self.ui.button_spline.setChecked(False)
+                else:
+                    self.ui.button_spline.setChecked(False)
+                    self.ui.button_surface.setChecked(False)
+                    self.ui.button_painter.setChecked(True)
             else:
                 self.ui.button_spline.setChecked(False)
                 self.ui.button_surface.setChecked(False)
             self.ui.button_box.setChecked(rt.getUserProp(group.controller,"ScatterDisplayAsBox")=="True")
+
+        
 
        
 
