@@ -556,28 +556,27 @@ class ScatterGroup:
         return False
     
     def normal_direction(self,slider_value):
-        print("DEBUG: funtion normal_direction start.")
-    
     
         """Update orientation of instances based on slider value."""    
          
         slider_value = int(slider_value)
-        # 2️⃣ Guardar valor actual para otros procesos
+
+        # save in params
         self.params["direction_value"] = slider_value
 
-        # 3️⃣ Normalizar valor a rango [-1, 1]
+        # change UI slider value to 0.0 - 1.0 range
         s = max(-100, min(100, slider_value)) / 100.0
 
-        # 4️⃣ Vectores base
+        # Define up vectors
         Z_UP = rt.point3(0, 0, 1)
         NEG_Z_UP = -Z_UP
 
-        # 5️⃣ Verificar que existan instancias
+        # check if there are instances to update
         if not hasattr(self, "instances") or not self.instances:
             print("DEBUG: No instances to update orientation.")
             return
 
-        # 6️⃣ Recorrer todas las instancias del scatter
+        # loop through instances and update orientation
 
         for idx, inst_data in enumerate(self.instances):
             inst = inst_data.node if hasattr(inst_data, "node") else inst_data.get("node")
@@ -590,7 +589,7 @@ class ScatterGroup:
             n = rt.normalize(face_normal) if face_normal else rt.point3(0, 0, 1)
             print(f"DEBUG: Instance {idx} original normal: {face_normal}, normalized: {n}")
 
-            # calcular vector z_axis
+            # get new z_axis based on slider value
             s = max(-1.0, min(1.0, slider_value / 100.0))
             if s >= 0:
                 alpha = s
@@ -600,7 +599,7 @@ class ScatterGroup:
                 z_axis = rt.normalize((n * (1 - alpha)) + (rt.point3(0, 0, -1) * alpha))
             print(f"DEBUG: Instance {idx} z_axis after slider adjustment: {z_axis}")
 
-            # sistema ortogonal
+            # build local coordinate system
             up_ref = rt.point3(0, 1, 0)
             if abs(rt.dot(z_axis, up_ref)) > 0.99:
                 up_ref = rt.point3(1, 0, 0)
@@ -608,9 +607,6 @@ class ScatterGroup:
             y_axis = rt.normalize(rt.cross(z_axis, x_axis))
             pos = inst.position
             inst.transform = rt.matrix3(x_axis, y_axis, z_axis, pos)
-
-
-
     
 #manage multiple scatter groups
 
@@ -713,4 +709,74 @@ class ScatterTool:
                     print(f"DEBUG: Found group '{g.name}' by {obj.name}")
                     return g
         return None
+    
+        #assign variation to diffuse channel
+    def apply_color_variation(self, obj, mat, submat_id,
+                            hue_var, sat_var, val_var,
+                            variation_type=0, random_seed=12345):
+        """Apply color variation to the diffuse channel of a material using OSL 'Color Variation' node."""
+        # --- get material to edit ---
+        if rt.classOf(mat) == rt.Multimaterial and submat_id is not None:
+            if submat_id < 1 or submat_id > mat.numsubs:
+                print(f"❌ Submaterial ID {submat_id} is out of range.")
+                return
+            submat = mat.materialList[submat_id]
+            if submat is None:
+                print(f"❌ Submaterial ID {submat_id} is None.")
+                return
+            mat_to_edit = submat
+        else:
+            mat_to_edit = mat
+
+        # --- get diffuse map ---
+        diffuse_map = None
+        map_prop_name = None
+        
+        if rt.classOf(mat_to_edit) == rt.StandardMaterial:
+            map_prop_name = "diffuseMap"
+            diffuse_map = mat_to_edit.diffuseMap
+
+        elif rt.classOf(mat_to_edit) == rt.PhysicalMaterial:
+            map_prop_name = "base_color_map"
+            diffuse_map = mat_to_edit.base_color_map
+
+        elif rt.classOf(mat_to_edit) == rt.ArnoldStandardSurface:
+            map_prop_name = "base_color_texmap"
+            diffuse_map = mat_to_edit.base_color_texmap
+
+        else:
+            print(f"⚠️ Unsupported material type: {rt.classOf(mat_to_edit)}")
+            return
+        
+        if not diffuse_map:
+            print(f"there is no diffuse map in material '{mat_to_edit.name}'.")
+            return
+
+        # --- create or get OSL 'Color Variation' node ---
+        if rt.classOf(diffuse_map) == rt.OslMap and diffuse_map.shaderName == "Color Variation":
+            osl_node = diffuse_map
+        else:
+            osl_node = rt.OslMap()
+            osl_node.shaderName = "Color Variation"
+
+            #set the original bitmap as input 1 of OSL node
+            osl_node.subMap1 = diffuse_map
+
+            #replace diffuse map with OSL node
+            setattr(mat_to_edit, map_prop_name, osl_node)
+
+            print(f"DEBUG: Created new OSL 'Color Variation' node in material '{mat_to_edit.name}'.")
+
+        # --- set OSL parameters ---
+        osl_node.hue_variation = hue_var
+        osl_node.saturation_variation = sat_var
+        osl_node.value_variation = val_var
+        osl_node.random_seed = random_seed
+        osl_node.variation_type = variation_type
+
+        print(f"✅ Applied color variation to material '{mat_to_edit.name}' on object '{obj.name}':")
+        print(f"   → Hue: {hue_var}, Sat: {sat_var}, Value: {val_var}, Type: {variation_type}")
+
+    
+
     

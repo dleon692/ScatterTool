@@ -39,9 +39,9 @@
        <property name="geometry">
         <rect>
          <x>0</x>
-         <y>0</y>
+         <y>-451</y>
          <width>263</width>
-         <height>1394</height>
+         <height>1331</height>
         </rect>
        </property>
        <property name="sizePolicy">
@@ -1105,37 +1105,7 @@
                    <property name="topMargin">
                     <number>0</number>
                    </property>
-                   <item>
-                    <widget class="QLabel" name="label_variationNum">
-                     <property name="text">
-                      <string>Variation Number</string>
-                     </property>
-                    </widget>
-                   </item>
-                   <item>
-                    <spacer name="horizontalSpacer_5">
-                     <property name="orientation">
-                      <enum>Qt::Orientation::Horizontal</enum>
-                     </property>
-                     <property name="sizeHint" stdset="0">
-                      <size>
-                       <width>40</width>
-                       <height>20</height>
-                      </size>
-                     </property>
-                    </spacer>
-                   </item>
-                   <item>
-                    <widget class="QSpinBox" name="spinBox_variatNum"/>
-                   </item>
                   </layout>
-                 </item>
-                 <item>
-                  <widget class="Line" name="line_2">
-                   <property name="orientation">
-                    <enum>Qt::Orientation::Horizontal</enum>
-                   </property>
-                  </widget>
                  </item>
                  <item>
                   <layout class="QHBoxLayout" name="horizontalLayout_5">
@@ -1187,7 +1157,7 @@
                     <number>0</number>
                    </property>
                    <item row="2" column="2">
-                    <widget class="QSpinBox" name="spinBox_hueMin">
+                    <widget class="QSpinBox" name="spinBox_hueVar">
                      <property name="wrapping">
                       <bool>false</bool>
                      </property>
@@ -1208,8 +1178,18 @@
                      </property>
                     </widget>
                    </item>
-                   <item row="4" column="2">
-                    <widget class="QSpinBox" name="spinBox_briMin">
+                   <item row="4" column="0">
+                    <widget class="QLabel" name="label_bright">
+                     <property name="toolTip">
+                      <string>Brightness (Min -100 / Max 100)</string>
+                     </property>
+                     <property name="text">
+                      <string>Brightness</string>
+                     </property>
+                    </widget>
+                   </item>
+                   <item row="3" column="2">
+                    <widget class="QSpinBox" name="spinBox_satVar">
                      <property name="minimum">
                       <number>-100</number>
                      </property>
@@ -1218,12 +1198,28 @@
                      </property>
                     </widget>
                    </item>
-                   <item row="4" column="3">
-                    <widget class="QSpinBox" name="spinBox_briMax">
+                   <item row="4" column="2">
+                    <widget class="QSpinBox" name="spinBox_briVar">
+                     <property name="minimum">
+                      <number>-100</number>
+                     </property>
                      <property name="maximum">
-                      <number>100</number>
+                      <number>0</number>
                      </property>
                     </widget>
+                   </item>
+                   <item row="2" column="1">
+                    <spacer name="horizontalSpacer_7">
+                     <property name="orientation">
+                      <enum>Qt::Orientation::Horizontal</enum>
+                     </property>
+                     <property name="sizeHint" stdset="0">
+                      <size>
+                       <width>40</width>
+                       <height>20</height>
+                      </size>
+                     </property>
+                    </spacer>
                    </item>
                    <item row="2" column="0">
                     <widget class="QLabel" name="label_hue">
@@ -1244,76 +1240,6 @@
                       <string>Saturation</string>
                      </property>
                     </widget>
-                   </item>
-                   <item row="5" column="2">
-                    <widget class="QSpinBox" name="spinBox_conMin">
-                     <property name="minimum">
-                      <number>-100</number>
-                     </property>
-                     <property name="maximum">
-                      <number>0</number>
-                     </property>
-                    </widget>
-                   </item>
-                   <item row="3" column="2">
-                    <widget class="QSpinBox" name="spinBox_satMin">
-                     <property name="minimum">
-                      <number>-100</number>
-                     </property>
-                     <property name="maximum">
-                      <number>0</number>
-                     </property>
-                    </widget>
-                   </item>
-                   <item row="3" column="3">
-                    <widget class="QSpinBox" name="spinBox_satMax">
-                     <property name="maximum">
-                      <number>100</number>
-                     </property>
-                    </widget>
-                   </item>
-                   <item row="5" column="0">
-                    <widget class="QLabel" name="label_contrast">
-                     <property name="toolTip">
-                      <string>Contrast (Min -100 / Max 100)</string>
-                     </property>
-                     <property name="text">
-                      <string>Contrast</string>
-                     </property>
-                    </widget>
-                   </item>
-                   <item row="5" column="3">
-                    <widget class="QSpinBox" name="spinBox_conMax">
-                     <property name="maximum">
-                      <number>100</number>
-                     </property>
-                    </widget>
-                   </item>
-                   <item row="2" column="3">
-                    <widget class="QSpinBox" name="spinBox_hueMax"/>
-                   </item>
-                   <item row="4" column="0">
-                    <widget class="QLabel" name="label_bright">
-                     <property name="toolTip">
-                      <string>Brightness (Min -100 / Max 100)</string>
-                     </property>
-                     <property name="text">
-                      <string>Brightness</string>
-                     </property>
-                    </widget>
-                   </item>
-                   <item row="2" column="1">
-                    <spacer name="horizontalSpacer_7">
-                     <property name="orientation">
-                      <enum>Qt::Orientation::Horizontal</enum>
-                     </property>
-                     <property name="sizeHint" stdset="0">
-                      <size>
-                       <width>40</width>
-                       <height>20</height>
-                      </size>
-                     </property>
-                    </spacer>
                    </item>
                   </layout>
                  </item>

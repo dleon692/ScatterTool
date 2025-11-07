@@ -44,7 +44,7 @@ class Ui_ScatterToolUI(object):
         self.scrollArea.setWidgetResizable(True)
         self.scrollAreaWidgetContents = QWidget()
         self.scrollAreaWidgetContents.setObjectName(u"scrollAreaWidgetContents")
-        self.scrollAreaWidgetContents.setGeometry(QRect(0, 0, 263, 1394))
+        self.scrollAreaWidgetContents.setGeometry(QRect(0, -451, 263, 1331))
         sizePolicy.setHeightForWidth(self.scrollAreaWidgetContents.sizePolicy().hasHeightForWidth())
         self.scrollAreaWidgetContents.setSizePolicy(sizePolicy)
         self.verticalLayout_3 = QVBoxLayout(self.scrollAreaWidgetContents)
@@ -548,29 +548,8 @@ class Ui_ScatterToolUI(object):
         self.horizontalLayout_4 = QHBoxLayout()
         self.horizontalLayout_4.setObjectName(u"horizontalLayout_4")
         self.horizontalLayout_4.setContentsMargins(-1, 0, -1, -1)
-        self.label_variationNum = QLabel(self.groupBox_colorvar)
-        self.label_variationNum.setObjectName(u"label_variationNum")
-
-        self.horizontalLayout_4.addWidget(self.label_variationNum)
-
-        self.horizontalSpacer_5 = QSpacerItem(40, 20, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
-
-        self.horizontalLayout_4.addItem(self.horizontalSpacer_5)
-
-        self.spinBox_variatNum = QSpinBox(self.groupBox_colorvar)
-        self.spinBox_variatNum.setObjectName(u"spinBox_variatNum")
-
-        self.horizontalLayout_4.addWidget(self.spinBox_variatNum)
-
 
         self.verticalLayout_9.addLayout(self.horizontalLayout_4)
-
-        self.line_2 = QFrame(self.groupBox_colorvar)
-        self.line_2.setObjectName(u"line_2")
-        self.line_2.setFrameShape(QFrame.Shape.HLine)
-        self.line_2.setFrameShadow(QFrame.Shadow.Sunken)
-
-        self.verticalLayout_9.addWidget(self.line_2)
 
         self.horizontalLayout_5 = QHBoxLayout()
         self.horizontalLayout_5.setObjectName(u"horizontalLayout_5")
@@ -604,29 +583,39 @@ class Ui_ScatterToolUI(object):
         self.gridLayout_6 = QGridLayout()
         self.gridLayout_6.setObjectName(u"gridLayout_6")
         self.gridLayout_6.setContentsMargins(-1, 0, -1, -1)
-        self.spinBox_hueMin = QSpinBox(self.groupBox_colorvar)
-        self.spinBox_hueMin.setObjectName(u"spinBox_hueMin")
-        self.spinBox_hueMin.setWrapping(False)
-        self.spinBox_hueMin.setFrame(True)
-        self.spinBox_hueMin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.UpDownArrows)
-        self.spinBox_hueMin.setProperty(u"showGroupSeparator", False)
-        self.spinBox_hueMin.setMinimum(-180)
-        self.spinBox_hueMin.setMaximum(0)
+        self.spinBox_hueVar = QSpinBox(self.groupBox_colorvar)
+        self.spinBox_hueVar.setObjectName(u"spinBox_hueVar")
+        self.spinBox_hueVar.setWrapping(False)
+        self.spinBox_hueVar.setFrame(True)
+        self.spinBox_hueVar.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.UpDownArrows)
+        self.spinBox_hueVar.setProperty(u"showGroupSeparator", False)
+        self.spinBox_hueVar.setMinimum(0)
+        self.spinBox_hueVar.setMaximum(100)
 
-        self.gridLayout_6.addWidget(self.spinBox_hueMin, 2, 2, 1, 1)
+        self.gridLayout_6.addWidget(self.spinBox_hueVar, 2, 2, 1, 1)
 
-        self.spinBox_briMin = QSpinBox(self.groupBox_colorvar)
-        self.spinBox_briMin.setObjectName(u"spinBox_briMin")
-        self.spinBox_briMin.setMinimum(-100)
-        self.spinBox_briMin.setMaximum(0)
+        self.label_bright = QLabel(self.groupBox_colorvar)
+        self.label_bright.setObjectName(u"label_bright")
 
-        self.gridLayout_6.addWidget(self.spinBox_briMin, 4, 2, 1, 1)
+        self.gridLayout_6.addWidget(self.label_bright, 4, 0, 1, 1)
 
-        self.spinBox_briMax = QSpinBox(self.groupBox_colorvar)
-        self.spinBox_briMax.setObjectName(u"spinBox_briMax")
-        self.spinBox_briMax.setMaximum(100)
+        self.spinBox_satVar = QSpinBox(self.groupBox_colorvar)
+        self.spinBox_satVar.setObjectName(u"spinBox_satVar")
+        self.spinBox_satVar.setMinimum(0)
+        self.spinBox_satVar.setMaximum(100)
 
-        self.gridLayout_6.addWidget(self.spinBox_briMax, 4, 3, 1, 1)
+        self.gridLayout_6.addWidget(self.spinBox_satVar, 3, 2, 1, 1)
+
+        self.spinBox_briVar = QSpinBox(self.groupBox_colorvar)
+        self.spinBox_briVar.setObjectName(u"spinBox_briVar")
+        self.spinBox_briVar.setMinimum(0)
+        self.spinBox_briVar.setMaximum(100)
+
+        self.gridLayout_6.addWidget(self.spinBox_briVar, 4, 2, 1, 1)
+
+        self.horizontalSpacer_7 = QSpacerItem(40, 20, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
+
+        self.gridLayout_6.addItem(self.horizontalSpacer_7, 2, 1, 1, 1)
 
         self.label_hue = QLabel(self.groupBox_colorvar)
         self.label_hue.setObjectName(u"label_hue")
@@ -637,51 +626,6 @@ class Ui_ScatterToolUI(object):
         self.label_saturation.setObjectName(u"label_saturation")
 
         self.gridLayout_6.addWidget(self.label_saturation, 3, 0, 1, 1)
-
-        self.spinBox_conMin = QSpinBox(self.groupBox_colorvar)
-        self.spinBox_conMin.setObjectName(u"spinBox_conMin")
-        self.spinBox_conMin.setMinimum(-100)
-        self.spinBox_conMin.setMaximum(0)
-
-        self.gridLayout_6.addWidget(self.spinBox_conMin, 5, 2, 1, 1)
-
-        self.spinBox_satMin = QSpinBox(self.groupBox_colorvar)
-        self.spinBox_satMin.setObjectName(u"spinBox_satMin")
-        self.spinBox_satMin.setMinimum(-100)
-        self.spinBox_satMin.setMaximum(0)
-
-        self.gridLayout_6.addWidget(self.spinBox_satMin, 3, 2, 1, 1)
-
-        self.spinBox_satMax = QSpinBox(self.groupBox_colorvar)
-        self.spinBox_satMax.setObjectName(u"spinBox_satMax")
-        self.spinBox_satMax.setMaximum(100)
-
-        self.gridLayout_6.addWidget(self.spinBox_satMax, 3, 3, 1, 1)
-
-        self.label_contrast = QLabel(self.groupBox_colorvar)
-        self.label_contrast.setObjectName(u"label_contrast")
-
-        self.gridLayout_6.addWidget(self.label_contrast, 5, 0, 1, 1)
-
-        self.spinBox_conMax = QSpinBox(self.groupBox_colorvar)
-        self.spinBox_conMax.setObjectName(u"spinBox_conMax")
-        self.spinBox_conMax.setMaximum(100)
-
-        self.gridLayout_6.addWidget(self.spinBox_conMax, 5, 3, 1, 1)
-
-        self.spinBox_hueMax = QSpinBox(self.groupBox_colorvar)
-        self.spinBox_hueMax.setObjectName(u"spinBox_hueMax")
-
-        self.gridLayout_6.addWidget(self.spinBox_hueMax, 2, 3, 1, 1)
-
-        self.label_bright = QLabel(self.groupBox_colorvar)
-        self.label_bright.setObjectName(u"label_bright")
-
-        self.gridLayout_6.addWidget(self.label_bright, 4, 0, 1, 1)
-
-        self.horizontalSpacer_7 = QSpacerItem(40, 20, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
-
-        self.gridLayout_6.addItem(self.horizontalSpacer_7, 2, 1, 1, 1)
 
 
         self.verticalLayout_9.addLayout(self.gridLayout_6)
@@ -898,15 +842,6 @@ class Ui_ScatterToolUI(object):
         self.gridLayout_7 = QGridLayout()
         self.gridLayout_7.setObjectName(u"gridLayout_7")
         self.gridLayout_7.setVerticalSpacing(0)
-        self.horizontalSlider_direction = QSlider(self.groupBox_direction)
-        self.horizontalSlider_direction.setObjectName(u"horizontalSlider_direction")
-        self.horizontalSlider_direction.setMinimum(-100)
-        self.horizontalSlider_direction.setMaximum(100)
-        self.horizontalSlider_direction.setSliderPosition(100)
-        self.horizontalSlider_direction.setOrientation(Qt.Orientation.Horizontal)
-
-        self.gridLayout_7.addWidget(self.horizontalSlider_direction, 7, 1, 1, 1)
-
         self.horizontalLayout = QHBoxLayout()
         self.horizontalLayout.setObjectName(u"horizontalLayout")
         self.horizontalLayout.setContentsMargins(0, -1, -1, -1)
@@ -953,6 +888,15 @@ class Ui_ScatterToolUI(object):
         self.spinBox_direction.setMaximum(100)
 
         self.gridLayout_7.addWidget(self.spinBox_direction, 7, 2, 1, 1)
+
+        self.horizontalSlider_direction = QSlider(self.groupBox_direction)
+        self.horizontalSlider_direction.setObjectName(u"horizontalSlider_direction")
+        self.horizontalSlider_direction.setMinimum(-100)
+        self.horizontalSlider_direction.setMaximum(100)
+        self.horizontalSlider_direction.setSliderPosition(100)
+        self.horizontalSlider_direction.setOrientation(Qt.Orientation.Horizontal)
+
+        self.gridLayout_7.addWidget(self.horizontalSlider_direction, 7, 1, 1, 1)
 
 
         self.verticalLayout_7.addLayout(self.gridLayout_7)
@@ -1160,8 +1104,11 @@ class Ui_ScatterToolUI(object):
         self.toolButton.setText(QCoreApplication.translate("ScatterToolUI", u"Elements Transform", None))
         self.toolButton_scale.setText(QCoreApplication.translate("ScatterToolUI", u"Scale (0% / 100%)", None))
         self.groupBox_colorvar.setTitle(QCoreApplication.translate("ScatterToolUI", u"Texture / Diffuse Color ", None))
-        self.label_variationNum.setText(QCoreApplication.translate("ScatterToolUI", u"Variation Number", None))
         self.label_id.setText(QCoreApplication.translate("ScatterToolUI", u"Element ID", None))
+#if QT_CONFIG(tooltip)
+        self.label_bright.setToolTip(QCoreApplication.translate("ScatterToolUI", u"Brightness (Min -100 / Max 100)", None))
+#endif // QT_CONFIG(tooltip)
+        self.label_bright.setText(QCoreApplication.translate("ScatterToolUI", u"Brightness", None))
 #if QT_CONFIG(tooltip)
         self.label_hue.setToolTip(QCoreApplication.translate("ScatterToolUI", u"Hue Shift (Min -180 / Max 180)", None))
 #endif // QT_CONFIG(tooltip)
@@ -1170,14 +1117,6 @@ class Ui_ScatterToolUI(object):
         self.label_saturation.setToolTip(QCoreApplication.translate("ScatterToolUI", u"Saturation (Min -100 / Max 100)", None))
 #endif // QT_CONFIG(tooltip)
         self.label_saturation.setText(QCoreApplication.translate("ScatterToolUI", u"Saturation", None))
-#if QT_CONFIG(tooltip)
-        self.label_contrast.setToolTip(QCoreApplication.translate("ScatterToolUI", u"Contrast (Min -100 / Max 100)", None))
-#endif // QT_CONFIG(tooltip)
-        self.label_contrast.setText(QCoreApplication.translate("ScatterToolUI", u"Contrast", None))
-#if QT_CONFIG(tooltip)
-        self.label_bright.setToolTip(QCoreApplication.translate("ScatterToolUI", u"Brightness (Min -100 / Max 100)", None))
-#endif // QT_CONFIG(tooltip)
-        self.label_bright.setText(QCoreApplication.translate("ScatterToolUI", u"Brightness", None))
         self.pushButton_apply.setText(QCoreApplication.translate("ScatterToolUI", u"Apply", None))
         self.groupBox_dmethod.setTitle(QCoreApplication.translate("ScatterToolUI", u"Distribution Method", None))
         self.button_surface.setText(QCoreApplication.translate("ScatterToolUI", u"Surface", None))
