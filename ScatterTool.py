@@ -709,74 +709,76 @@ class ScatterTool:
                     print(f"DEBUG: Found group '{g.name}' by {obj.name}")
                     return g
         return None
-    
-        #assign variation to diffuse channel
-    def apply_color_variation(self, obj, mat, submat_id,
-                            hue_var, sat_var, val_var,
-                            variation_type=0, random_seed=12345):
-        """Apply color variation to the diffuse channel of a material using OSL 'Color Variation' node."""
-        # --- get material to edit ---
-        if rt.classOf(mat) == rt.Multimaterial and submat_id is not None:
-            if submat_id < 1 or submat_id > mat.numsubs:
-                print(f"❌ Submaterial ID {submat_id} is out of range.")
-                return
-            submat = mat.materialList[submat_id]
-            if submat is None:
-                print(f"❌ Submaterial ID {submat_id} is None.")
-                return
-            mat_to_edit = submat
-        else:
-            mat_to_edit = mat
 
-        # --- get diffuse map ---
-        diffuse_map = None
-        map_prop_name = None
-        
-        if rt.classOf(mat_to_edit) == rt.StandardMaterial:
-            map_prop_name = "diffuseMap"
-            diffuse_map = mat_to_edit.diffuseMap
-
-        elif rt.classOf(mat_to_edit) == rt.PhysicalMaterial:
-            map_prop_name = "base_color_map"
-            diffuse_map = mat_to_edit.base_color_map
-
-        elif rt.classOf(mat_to_edit) == rt.ArnoldStandardSurface:
-            map_prop_name = "base_color_texmap"
-            diffuse_map = mat_to_edit.base_color_texmap
-
-        else:
-            print(f"⚠️ Unsupported material type: {rt.classOf(mat_to_edit)}")
-            return
-        
-        if not diffuse_map:
-            print(f"there is no diffuse map in material '{mat_to_edit.name}'.")
+    def apply_color_variation(self,hue_var, sat_var, val_var,submat_id,group=None,num_variations=5):
+        if group is None:
+            group = self.current_group
+        if not group or not rt.isValidNode(group.controller):
+            print("❌ No valid group or controller found.")
             return
 
-        # --- create or get OSL 'Color Variation' node ---
-        if rt.classOf(diffuse_map) == rt.OslMap and diffuse_map.shaderName == "Color Variation":
-            osl_node = diffuse_map
+        children =group.controller.children
+        if not children:
+            print(f"DEBUG: No children found for '{self.name}'.")
+            return
+ 
+        #create  color correction
+        material= children[0].material
+        if material is None:
+            print("❌ No se encontró material en los hijos.")
+            return
+        
+        #get material if multimaterial
+        if rt.classOf(material) == rt.Multimaterial:
+            if submat_id is None or submat_id<1 or submat_id>material.numsubs:
+                print("❌ Submaterial ID inválido.")
+                return
+            sub_material=material.materialList[submat_id-1]
         else:
-            osl_node = rt.OslMap()
-            osl_node.shaderName = "Color Variation"
+            sub_material= material
+        
+        cc= rt.ColorCorrection()
+        sub_material.base_color_map = cc
 
-            #set the original bitmap as input 1 of OSL node
-            osl_node.subMap1 = diffuse_map
+        #max range for variation
+        hue_max = 180
+        sat_max = 100
+        bri_max = 100
 
-            #replace diffuse map with OSL node
-            setattr(mat_to_edit, map_prop_name, osl_node)
+        hue_range = (hue_var / 100) * hue_max
+        sat_range = (sat_var / 100) * sat_max
+        bri_range = (val_var / 100) * bri_max
 
-            print(f"DEBUG: Created new OSL 'Color Variation' node in material '{mat_to_edit.name}'.")
+        #create variation
+        variations = []
+        for i in range(num_variations):
+            mat_copy=rt.copy(sub_material)
+            cc=rt.ColorCorrection()
 
-        # --- set OSL parameters ---
-        osl_node.hue_variation = hue_var
-        osl_node.saturation_variation = sat_var
-        osl_node.value_variation = val_var
-        osl_node.random_seed = random_seed
-        osl_node.variation_type = variation_type
+            #assign existing map to new color correction
+            if hasattr(mat_copy, 'base_color_map') and mat_copy.base_color_map is not None:
+                cc.base_map = mat_copy.base_color_map
 
-        print(f"✅ Applied color variation to material '{mat_to_edit.name}' on object '{obj.name}':")
-        print(f"   → Hue: {hue_var}, Sat: {sat_var}, Value: {val_var}, Type: {variation_type}")
+            mat_copy.base_color_map = cc
 
-    
+            cc.hueShift = random.uniform(-hue_range, hue_range)
+            cc.saturation = random.uniform(-sat_range, sat_range)
+            cc.brightness = random.uniform(-bri_range, bri_range)
+
+            variations.append(mat_copy)
+ 
+
+        #assign variation to each child
+        for child in children:
+            mat_to_assign = random.choice(variations)
+            child.material = mat_to_assign
+        
+        print("Creando ColorCorrection y asignándolo al material seleccionado...")
+
+
+
+
+
+
 
     

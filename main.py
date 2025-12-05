@@ -1022,26 +1022,16 @@ class ScatterToolApp(QtWidgets.QMainWindow):
 
         # ------------------- Apply color variation -------------------   
     def on_apply_color_variation (self):
+        if not self.current_group or not rt.isValidNode(self.current_group.controller):
+            print("No current scatter group selected.")
+            return
+
         submat_id= self.ui.spinBox_elemtID.value()
-        hue_var=self.ui.spinBox_hueVar.value()/100.0
-        sat_var=self.ui.spinBox_satVar.value()/100.0
-        val_var=self.ui.spinBox_briVar.value()/100.0
+        hue_var=self.ui.spinBox_hueVar.value()
+        sat_var=self.ui.spinBox_satVar.value()
+        val_var=self.ui.spinBox_briVar.value()
 
-
-        #check selected object
-        if rt.selection.count > 0:
-            obj = rt.selection[0]
-            mat = obj.material
-            if mat:
-                self.scatter_tool.apply_color_variation(obj,mat, submat_id,hue_var, sat_var, val_var,variation_type=0, random_seed=12345)
-                print(f"DEBUG: Applied color variation to material {mat.name} on object {obj.name}")
-            else:
-                print("Selected object has no material assigned.")
-        else:
-            print("No object selected to apply color variation.")
-
-        
-
+        self.scatter_tool.apply_color_variation(hue_var, sat_var, val_var, submat_id,self.current_group,num_variations=5)
        
 
 # --------------------------- Launch window ---------------------------            
