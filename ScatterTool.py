@@ -711,8 +711,10 @@ class ScatterTool:
         return None
 
     def apply_color_variation(self,hue_var, sat_var, val_var,submat_id,group=None,num_variations=5):
+
         if group is None:
             group = self.current_group
+
         if not group or not rt.isValidNode(group.controller):
             print("❌ No valid group or controller found.")
             return
@@ -721,25 +723,19 @@ class ScatterTool:
         if not children:
             print(f"DEBUG: No children found for '{self.name}'.")
             return
- 
-        #create  color correction
-        material= children[0].material
-        if material is None:
-            print("❌ No se encontró material en los hijos.")
+        
+        #agrupate children by material
+        material_groups = {}
+        for child in children:
+            mat = child.material
+            if mat is None:
+                continue
+            material_groups.setdefault(mat, []).append(child)
+
+        if not material_groups:
+            print("❌ No children with assigned materials found.")
             return
         
-        #get material if multimaterial
-        if rt.classOf(material) == rt.Multimaterial:
-            if submat_id is None or submat_id<1 or submat_id>material.numsubs:
-                print("❌ Submaterial ID inválido.")
-                return
-            sub_material=material.materialList[submat_id-1]
-        else:
-            sub_material= material
-        
-        cc= rt.ColorCorrection()
-        sub_material.base_color_map = cc
-
         #max range for variation
         hue_max = 180
         sat_max = 100
@@ -748,35 +744,138 @@ class ScatterTool:
         hue_range = (hue_var / 100) * hue_max
         sat_range = (sat_var / 100) * sat_max
         bri_range = (val_var / 100) * bri_max
-
-        #create variation
-        variations = []
-        for i in range(num_variations):
-            mat_copy=rt.copy(sub_material)
-            cc=rt.ColorCorrection()
-
-            #assign existing map to new color correction
-            if hasattr(mat_copy, 'base_color_map') and mat_copy.base_color_map is not None:
-                cc.base_map = mat_copy.base_color_map
-
-            mat_copy.base_color_map = cc
-
-            cc.hueShift = random.uniform(-hue_range, hue_range)
-            cc.saturation = random.uniform(-sat_range, sat_range)
-            cc.brightness = random.uniform(-bri_range, bri_range)
-
-            variations.append(mat_copy)
  
+        #process each material group
+        for base_material,mat_children in material_groups.items():
 
-        #assign variation to each child
-        for child in children:
-            mat_to_assign = random.choice(variations)
-            child.material = mat_to_assign
+            #get material if multimaterial
+            if rt.classOf(base_material) == rt.Multimaterial:
+                if submat_id <1 or submat_id>base_material.numsubs:
+                    print("❌ invalid submaterial ID.")
+                    continue
+                sub_material=base_material.materialList[submat_id-1]
+            else:
+                sub_material= base_material
+
+            #validate if exists a group previous variations to clean
+            if not hasattr(self, "current_group") or self.current_group is None:
+                print("❌ No current group set for cleaning previous variations.")
+            else:
+                self.cleanup_previous_variations(base_material,submat_id)
         
-        print("Creando ColorCorrection y asignándolo al material seleccionado...")
+            #save original map
+            original_map = None
+            slot_name, prev_map = self.get_color_map_slot(sub_material)
 
+            if slot_name is None:
+                print(f"❌ No color map slot found in material '{sub_material.name}'. Skipping variation.")
+                continue
 
+            if prev_map is None:
+                pass
 
+            else:
+                if rt.classOf(prev_map) == rt.ColorCorrection:
+                    #if color correction, get the original map inside
+                    if hasattr(prev_map, "map") and prev_map.map:
+                        original_map = prev_map.map
+                    elif hasattr(prev_map, "inputMap") and prev_map.inputMap:
+                        original_map = prev_map.inputMap
+                else:
+                    original_map = prev_map
+
+            #create variation
+            variations = []
+            for i in range(num_variations):
+
+                #duplicate original material
+                mat_copy=rt.copy(sub_material)
+
+                #create a new color correction map
+                cc=rt.ColorCorrection()
+
+                #assign existing map to new color correction
+                if original_map != None:
+                    if hasattr(cc, "map"):
+                        cc.map = original_map
+                    elif hasattr(cc, "inputMap"):
+                        cc.inputMap = original_map
+
+                #assign color correction to the material
+                if slot_name:
+                    setattr(mat_copy, slot_name, cc)
+
+                #apply random variation
+                cc.hueShift = random.uniform(-hue_range, hue_range)
+                cc.saturation = random.uniform(-sat_range, sat_range)
+                cc.brightness = random.uniform(-bri_range, bri_range)
+
+                variations.append(mat_copy)
+    
+
+            #assign variation to each child
+            for child in mat_children:
+                child.material = random.choice(variations)
+                rt.setUserProp(child, "SCATTER_VARIATION", True)
+                rt.setUserProp(child, "SCATTER_SOURCE_MATERIAL", base_material)
+                rt.setUserProp(child, "SCATTER_SUB_ID", submat_id)
+        
+        print(f"✅ Applied color variation to submaterial ID {submat_id} on group '{group.name}'")
+
+    def cleanup_previous_variations(self,base_material,submat_id):
+        group = self.current_group
+        if not group or not rt.isValidNode(group.controller):
+            return
+
+        children = group.controller.children
+        to_delete = []
+
+        for child in children:
+
+            try:
+                if rt.getUserProp(child, "SCATTER_VARIATION") != True:
+                    continue
+            except:
+                print("ERROR:Child material missing SCATTER_VARIATION property.")
+                continue
+
+            src = rt.getUserProp(child, "SCATTER_SOURCE_MATERIAL")
+            if src != base_material:
+                continue
+            
+            sid = rt.getUserProp(child, "SCATTER_SUB_ID")
+            if sid != submat_id:
+                continue
+
+            if child.material:
+                to_delete.append(child.material)
+
+            #clean user props
+            rt.setUserProp(child, "SCATTER_VARIATION", None)
+            rt.setUserProp(child, "SCATTER_SOURCE_MATERIAL", None)
+            rt.setUserProp(child, "SCATTER_SUB_ID", None)          
+        
+        #delete materials
+        for mat in to_delete:
+            try:
+                rt.delete(mat)
+            except:
+                pass
+
+    def get_color_map_slot(self, mat):
+
+        slot_priority = [
+            "base_color_map",   # Physical Material
+            "diffuseMap",       # VRay / Standard
+            "base_color",       # Arnold
+            "texmap_diffuse",   # Corona
+        ]
+
+        for slot in slot_priority:
+            if hasattr(mat, slot):
+                return slot, getattr(mat, slot)
+
+        return None, None
 
 
 
