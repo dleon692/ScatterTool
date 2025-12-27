@@ -4,7 +4,7 @@ if BASE_DIR not in sys.path:
     sys.path.append(BASE_DIR)
 from PySide2 import QtWidgets,QtCore
 from ui_scattertool_UI import Ui_ScatterToolUI
-from scattertool import ScatterTool,ElementsManager
+from scattertool import ScatterTool,ElementsManager,ScatterGroup
 from pymxs import runtime as rt
 from PySide2.QtCore import QStringListModel
 from PySide2.QtWidgets import QButtonGroup
@@ -17,6 +17,7 @@ class ScatterToolApp(QtWidgets.QMainWindow):
         self.ui = Ui_ScatterToolUI()
         self.ui.setupUi(self)
         self.setWindowFlags(QtCore.Qt.WindowStaysOnTopHint)
+
 
         #create group for mode selection
         self.distribution_group = QButtonGroup(self)
@@ -47,14 +48,6 @@ class ScatterToolApp(QtWidgets.QMainWindow):
         #default selections
         self.ui.button_spline.setChecked(True)
         self.ui.button_mesh.setChecked(True)
-
-        #------------------test activate mouse picker for painter mode------------------
-        self.brush_active = False
-        self._mouse_pressed = False
-        self._brush_timer = QtCore.QTimer()
-        self._brush_timer.setInterval(50)  # frecuencia de ticks (ms), puedes ajustar
-        self._brush_timer.timeout.connect(self._brush_tick)
-        #-----------------------------------------------------------------------------------------------------------
 
         #distribution mode buttons
         self.ui.button_elementCount.toggled.connect(self.on_distribution_mode_changed)
@@ -115,8 +108,7 @@ class ScatterToolApp(QtWidgets.QMainWindow):
 
         self.setup_connections()
 
-        #test setup brush callbacks
-        self._setup_brush_callbacks()
+
 
         #selection callback
         try:
@@ -131,14 +123,16 @@ class ScatterToolApp(QtWidgets.QMainWindow):
             print(f"Error adding selection callback: {e}")
         
         # Expose the application instance to builtins for access in the callback
-        builtins.ScatterToolApp = ScatterToolApp
         builtins.scattertool_app_instance = self
 
         try:
             self.on_selection_changed()  # Load initial selection if any
         except Exception:
             pass 
-  
+
+        
+
+
     # --------------------------- UI & list handling ---------------------------
     def refresh_listview(self):
         self.manager.elements = [obj for obj in self.manager.get_all() if rt.isValidNode(obj)]
@@ -193,6 +187,8 @@ class ScatterToolApp(QtWidgets.QMainWindow):
             self.ui.label_brushSize.setEnabled(False)
             self.ui.spin_brush.setEnabled(False)
 
+           
+
             #position jitter disable
             for w in (self.ui.spin_PxMin, self.ui.spin_PxMax,
                   self.ui.spin_PyMin, self.ui.spin_PyMax,
@@ -212,6 +208,7 @@ class ScatterToolApp(QtWidgets.QMainWindow):
 
             self.ui.label_brushSize.setEnabled(False)
             self.ui.spin_brush.setEnabled(False)
+
         
         #painter mode
         elif self.ui.button_painter.isChecked():
@@ -228,86 +225,108 @@ class ScatterToolApp(QtWidgets.QMainWindow):
             self.ui.spin_brush.setEnabled(True)
             self.ui.label_brushSize.setEnabled(True)
 
+            #execute painter click function
+            if self.ui.button_painter.isChecked():
+                self.activate_painter_mode()
+                print("UI DEBUG ▶ Painter mode ACTIVATED")
+            else:
+                rt.execute("try(stopTool T) catch()")
+                print("❌ Scatter Painter detenido")
+
+             
+   
+
         self.on_toggle_random(self.ui.checkBox_random.isChecked())
-    #--------------------------- test funtions for painter mode ---------------------------
+        
+    # --------------------------- Scatter Painter ---------------------------
+    def activate_painter_mode(self):
+        """
+        Activa el modo Painter en 3ds Max.
+        Al hacer clic y arrastrar sobre la escena, se crean instancias
+        de objetos usando la función scatter_place_at_point().
+        """
 
-    def _setup_brush_callbacks(self):
-        """Setup mouse down/up callbacks for painter mode."""
+        # Primero, intentamos detener cualquier tool T activa
         try:
-            ms_script_down = (
-                'app = getattr(builtins, "scattertool_app_instance", None); '
-                'import traceback; '
-                'try: '
-                '    if app: app._on_mouse_down() '
-                'except Exception: '
-                '    print(traceback.format_exc())'
+            rt.execute("try(stopTool T) catch()")
+            print("✅  Painter mode detenido previamente (si estaba activo)")
+        except RuntimeError as e:
+            print("⚠️ No se pudo detener la tool previamente:", e)
+
+        # Exponemos la instancia actual de la app a MaxScript
+        import builtins
+        builtins.scattertool_app_instance = self
+        print("PY ▶ scattertool_app_instance asignado")
+
+        # Definimos el MaxScript de la tool
+        ms_tool = r'''
+    tool T
+    (
+        on mouseMove clickNo do
+        (
+            if mouse.buttonStates[1] then
+            (
+                local r = mapScreenToWorldRay mouse.pos
+                local hits = intersectRayScene r
+
+                if hits != undefined and hits.count > 0 then
+                (
+                    local hitData = hits[1][2]
+                    local hitPos = if isProperty hitData #pos then hitData.pos else [0,0,0]
+
+                    local py_cmd = "scattertool_app_instance.scatter_place_at_point((" +
+                                (hitPos.x as string) + "," +
+                                (hitPos.y as string) + "," +
+                                (hitPos.z as string) + "))"
+                    python.execute py_cmd
+                )
+                else
+                (
+                    print "No sobre superficie"
+                )
             )
-            ms_script_up = (
-                'app = getattr(builtins, "scattertool_app_instance", None); '
-                'import traceback; '
-                'try: '
-                '    if app: app._on_mouse_up() '
-                'except Exception: '
-                '    print(traceback.format_exc())'
-            )
-
-            self._cb_mouse_down = rt.callbacks.addScript(rt.Name("mouseButtonDown"), ms_script_down)
-            self._cb_mouse_up = rt.callbacks.addScript(rt.Name("mouseButtonUp"), ms_script_up)
-        except Exception as e:
-            print(f"ERROR: Cannot setup brush callbacks: {e}")
-    def _on_mouse_down(self):
-        if self.ui.button_painter.isChecked():
-            self._mouse_pressed = True
-            if not self._brush_timer.isActive():
-                self._brush_timer.start()
-
-    def _on_mouse_up(self):
-        self._mouse_pressed = False
-        self._brush_active = False
-        if self._brush_timer.isActive():
-            self._brush_timer.stop()
-
-    def _brush_tick(self):
-        if not self._mouse_pressed or not self.ui.button_painter.isChecked():
-            return
-
-        surface, hit_point = self._get_surface_hit_point()
-        if not surface or not hit_point:
-            return
-
-        source_obj = self.manager.get_random()
-        if not source_obj:
-            return
-
-        if not self.current_group:
-            # Crear grupo temporal si no existe
-            self.current_group = self.scatter_tool.create_group(
-                source_obj=source_obj,
-                target_obj=surface,
-                mode="painter"
-            )
-            self.current_group.manager = self.manager
-
-        brush_radius = self.ui.spin_brush.value()
-        density = 5  # cantidad de instancias por tick
-        self.current_group.scatter_painter(hit_point, brush_radius, density=density)
-#--------------------------- test funtions for painter mode ---------------------------
-
-
-
-    def _valid_surface_selected(self):
-        return self.pending_target and rt.isKindOf(self.pending_target, rt.GeometryClass)
-
-    def _get_surface_hit_point(self):
-        """Devuelve superficie y punto de impacto bajo el cursor"""
+        )
+    )
+    startTool T
+    '''
+        # Ejecutamos la tool en 3ds Max
         try:
-            surface = self.pending_target if self._valid_surface_selected() else None
-            if surface:
-                hit_point = self.current_group.get_random_point_on_surface(surface) if self.current_group else None
-                return surface, hit_point
-        except Exception as e:
-            print(f"DEBUG: Error get_surface_hit_point: {e}")
-        return None, None
+            rt.execute(ms_tool)
+            print("✅ Painter mode activado desde Python")
+        except RuntimeError as e:
+            print("❌ Error al activar  Painter mode:", e)
+
+    def scatter_place_at_point(self,world_pos):
+        print("PY ▶ scatter_place_at_point recibido:", world_pos)
+
+        # Intenta obtener un grupo activo
+        active_group = None
+        if hasattr(self, "scatter_tool") and self.scatter_tool:
+            active_group = self.scatter_tool.get_group_by_selection()
+
+        # Si no hay grupo activo, crear uno temporal
+        if not active_group:
+            print("DEBUG ▶ No hay grupo activo, creando un grupo temporal 'PainterFree'")
+            temp_group_name = "PainterFree"
+            active_group = ScatterGroup(temp_group_name)
+            active_group.manager = self.manager  # asigna los objetos fuente
+            active_group.controller.position = rt.point3(*world_pos)
+            if hasattr(self, 'layer') and self.layer:
+                active_group.layer = self.layer
+            else:
+                active_group.layer = rt.LayerManager.newLayerFromName(temp_group_name)
+
+            # opcional: guardar en scatter_tool para reutilizar mientras dure la sesión
+            if hasattr(self, "scatter_tool") and self.scatter_tool:
+                self.scatter_tool.groups.append(active_group)
+
+        # Llamar al método scatter_painter del grupo (con colisión y random)
+        active_group.scatter_painter(world_pos)
+
+
+
+
+
 
     # --------------------------- Selection callback ---------------------------
     @staticmethod
@@ -405,7 +424,7 @@ class ScatterToolApp(QtWidgets.QMainWindow):
         if direction_value:
             self.ui.horizontalSlider_direction.setValue(int(direction_value))
             self.ui.spinBox_direction.setValue(int(direction_value))
-###########################TEST
+            
         # Position jitter
         pos_jitterX = rt.getUserProp(ctrl, "ScatterPosJitterX")
         x_min, x_max = map(float, pos_jitterX.split(","))
@@ -1032,7 +1051,7 @@ class ScatterToolApp(QtWidgets.QMainWindow):
         val_var=self.ui.spinBox_briVar.value()
 
         self.scatter_tool.apply_color_variation(hue_var, sat_var, val_var, submat_id,self.current_group,num_variations=5)
-       
+
 
 # --------------------------- Launch window ---------------------------            
 _WINDOW = None

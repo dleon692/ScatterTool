@@ -447,85 +447,39 @@ class ScatterGroup:
         elif count==created:
             print(f"{count} instances of '{source_obj.name}' were created along the surface.")
 
-
-    def scatter_painter(self, brush_position, brush_radius, density=5):
-
-        """Scatter multiple source objects inside a brush circle on the surface."""
-
-        if not (self.manager and self.manager.get_all() and rt.isValidNode(self.surface)):
-            print("ERROR: No valid surface or source objects.")
+    def scatter_painter (self,world_pos):
+        source_obj = self.manager.get_random() if self.manager and self.manager.get_all() else None
+        if not source_obj:
+            print("ERROR: No hay objetos fuente para scatter_painter")
             return
 
-        mesh = rt.snapshotAsMesh(self.surface)
-        face_count = mesh.numfaces
-        placed_points = []
+        candidate = rt.point3(*world_pos)
 
-        created = 0
-        attempts = 0
-        max_attempts = density * 10
+        # --- Chequeo de colisiones ---
+        collision = self.params.get("check_collisions", False)
+        min_distance_factor = self.params.get("collision_radius_factor", 0.1) if collision else 0.0
+        if collision and self.check_collisions(candidate, [(inst.node.position, inst.node) for inst in self.instances], source_obj, min_distance_factor):
+            print("❌ Punto rechazado por colisión")
+            return
 
-        while created < density and attempts < max_attempts:
-            attempts += 1
+        # --- Crear instancia ---
+        inst = rt.instance(source_obj)
+        inst.position = candidate
+        inst.parent = self.controller
+        self.layer.addNode(inst)
 
-            # Random point inside brush circle
-            angle = random.uniform(0, 2 * 3.14159)
-            radius = random.uniform(0, brush_radius)
-            offset = rt.point3(
-                radius * rt.cos(angle),
-                radius * rt.sin(angle),
-                0
-            )
-            candidate = brush_position + offset
+        # --- Random scale/rotation ---
+        self.apply_random_scale_and_rotation(inst)
 
-            #check collisions
-            if getattr(self, "collision_enabled", False) and self.check_collisions(candidate, placed_points, self.manager.get_random()):
-                continue
+        # --- Guardar instancia para futuras colisiones ---
+        self.instances.append(ScatterInstance(inst))
 
-            # Check which face contains the candidate point
-            for i in range(1, face_count + 1):
-                try:
-                    indices = rt.getFace(mesh, i)
-                    verts = [rt.getVert(mesh, indices[j]) for j in range(3)]
-                    v0, v1, v2 = verts
+        print(f"✅ Instancia de '{source_obj.name}' creada en {world_pos}")
 
-                    def same_side(p1, p2, a, b):
-                        cp1 = rt.cross(b - a, p1 - a)
-                        cp2 = rt.cross(b - a, p2 - a)
-                        return rt.dot(cp1, cp2) >= 0
 
-                    inside = (
-                        same_side(candidate, v0, v1, v2) and
-                        same_side(candidate, v1, v0, v2) and
-                        same_side(candidate, v2, v0, v1)
-                    )
+    
 
-                    if inside:
-                    # get a random source object from the list
-                        source_obj = self.manager.get_random()
-                        if not source_obj:
-                            continue
-
-                        # Create instance
-                        inst = rt.instance(source_obj)
-                        inst.position = candidate
-
-                        # Calculate normal for orientation
-                        normal = rt.normalize(rt.cross(v1 - v0, v2 - v0))
-                        z_axis = normal
-                        x_axis = rt.normalize(rt.cross(rt.point3(0,1,0), z_axis))
-                        y_axis = rt.normalize(rt.cross(z_axis, x_axis))
-                        inst.transform = rt.matrix3(x_axis, y_axis, z_axis, candidate)
-
-                        inst.parent = self.controller
-                        self.layer.addNode(inst)
-                        self.apply_random_scale_and_rotation(inst)
-                        self.instances.append(ScatterInstance(inst))
-                        placed_points.append((candidate, source_obj))
-                        created += 1
-                        break
-                except Exception as e:
-                    print(f"Error on face {i}: {e}")
-                    
+   
     def check_collisions(self, candidate, placed_points, obj, min_distance_factor=1.0):
         # Return True if candidate collides (too close) with any placed point.
         bb_min, bb_max = rt.nodeGetBoundingBox(obj, rt.matrix3(1))
