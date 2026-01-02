@@ -110,47 +110,36 @@ class ScatterGroup:
     
     def _setup_group_in_scene(self,target_obj=None):
         self.target = target_obj  
-        #setup controller and layer scene , if they already exist use them
-        ctrl_name = f"{self.name}_CTRL"
-        existing_ctrl = rt.getNodeByName(ctrl_name)
-
-        if existing_ctrl and rt.isValidNode(existing_ctrl):
-            self.controller = existing_ctrl
-            print(f"DEBUG: Controller '{self.controller.name}' already exists.")  # DEBUG
-        else:
-            self.controller = rt.Point(name=ctrl_name)
-            self.controller.size = 10
-            self.controller.box = True
-            self.controller.wirecolor = rt.color(random.randint(80, 220),  # R
-                                                random.randint(80, 220),  # G
-                                                random.randint(80, 220)   # B
-                                                )
-            print(f"DEBUG: Created new controller '{self.controller.name}'.")  # DEBUG
-            # Position controller at the center of the target object
-            if target_obj and rt.isValidNode(target_obj):
-                if rt.superClassOf(target_obj) == rt.Shape:  # Spline
-                    self.controller.position = rt.pathInterp(target_obj, 1, 0.0)
-                elif rt.isKindOf(target_obj, rt.GeometryClass):  # Surface
-                    bb_min, bb_max = rt.nodeGetBoundingBox(target_obj, rt.matrix3(1))
-                    self.controller.position = (bb_min + bb_max) / 2
+        try:
+            self.controller = rt.lastDummy
+        except AttributeError:
+            self.controller = None
+            print("WARNING: No controller found in the scene.")
+        
+        saved_pos = self.controller.position
         #Group info in controller's user properties
         rt.setUserProp(self.controller, "ScatterGroup", self.name) #tag for identify the group from the controller
 
         # Layer
-        existing_layer = rt.LayerManager.getLayerFromName(self.name)
-        if existing_layer is None:
-            self.layer = rt.LayerManager.newLayerFromName(self.name)
-        else:
-            self.layer = existing_layer
-        if self.controller not in self.layer.nodes:
-            self.layer.addNode(self.controller)
+        try:
+            self.layer = rt.lastDummyLayer
+        except AttributeError:
+            self.layer = None
+            print("WARNING: No layer found in the scene.")
             # self.layer.isFrozen = True
+
+        if self.controller and rt.isValidNode(self.controller):
+            self.controller.position = saved_pos
+        
 
     def set_spline(self, spline):
         self.spline = spline
 
     def set_surface(self, surface):
         self.surface = surface
+
+    def set_painter(self, painter):
+        self.painter = painter
         
     #clear instances
     def clear_instances(self, delete_nodes=False):
@@ -333,8 +322,11 @@ class ScatterGroup:
             z_axis = rt.point3(0, 0, 1)
             y_axis = rt.normalize(rt.cross(z_axis, x_axis))
             z_axis = rt.normalize(rt.cross(x_axis, y_axis))
-            base_tm = rt.matrix3(x_axis, y_axis, z_axis, final_pos)
+            base_tm = rt.matrix3(x_axis, y_axis, z_axis, final_pos) 
 
+            #store controller transform for future use
+            ctrl_pos = self.controller.position
+            ctrl_rot = self.controller.rotation
             # Create instance and assign transform
             inst = rt.instance(source_obj)
             inst.transform = base_tm
@@ -343,9 +335,10 @@ class ScatterGroup:
 
             self.apply_random_scale_and_rotation(inst)
             self.instances.append(ScatterInstance(inst))
-            # Reset controllers to avoid unexpected behavior
-            inst.pos.controller = rt.Position_XYZ()
-            inst.rotation.controller = rt.Euler_XYZ()
+
+            # assign back controller transform
+            self.controller.position = ctrl_pos
+            self.controller.rotation = ctrl_rot
 
         print(f"✅ {instance_count} instances of '{source_obj.name}' were created along the spline.")
 
@@ -458,8 +451,11 @@ class ScatterGroup:
         # --- Chequeo de colisiones ---
         collision = self.params.get("check_collisions", False)
         min_distance_factor = self.params.get("collision_radius_factor", 0.1) if collision else 0.0
+        print("DEBUG ▶ Checking collisions at:", candidate)
+        print("DEBUG ▶ Existing instances:", [(inst.node.position, inst.node) for inst in self.instances])
+        print("DEBUG ▶ Collision enabled?", collision)
         if collision and self.check_collisions(candidate, [(inst.node.position, inst.node) for inst in self.instances], source_obj, min_distance_factor):
-            print("❌ Punto rechazado por colisión")
+            print("object too close to each other, instance not created.")
             return
 
         # --- Crear instancia ---
@@ -625,13 +621,22 @@ class ScatterTool:
             return None
         
         #create a new group with unique name
-        group_name = f"Scatter_{len(self.groups)+1:03d}"
+        try:
+            group_name = rt.lastDummy.name
+        except AttributeError:
+            # fallback si no existe lastDummy
+            group_name = f"Scatter_{len(self.groups)+1:03d}"
+            print("WARNING: lastDummy not found, using default group name.")
         new_group = ScatterGroup(group_name)
 
         new_group._setup_group_in_scene(target_obj)
         if mode == "spline":
             new_group.set_spline(target_obj)
             new_group.scatter_spline(source_obj)
+        elif mode == "painter":
+            new_group.set_painter(target_obj=None)
+            new_group.scatter_painter(source_obj)
+         
         else:
             new_group.set_surface(target_obj)
             new_group.scatter_surface(source_obj)

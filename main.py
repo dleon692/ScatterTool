@@ -13,6 +13,76 @@ import builtins
 
 class ScatterToolApp(QtWidgets.QMainWindow):
     def __init__(self):
+        #create controller before UI to avoid null references
+
+        def new_controller():
+    
+            create_controller = """
+            global lastDummy
+            global lastDummyLayer
+
+            rollout NameDummyRollout "Trane Scatter Tool"
+            (
+                edittext edt_name "Name:" width:160
+                button btn_ok "Apply" width:160
+
+                on btn_ok pressed do
+                (
+                    if lastDummy != undefined and isValidNode lastDummy then
+                    (
+                        local dummyName = edt_name.text
+                        lastDummy.name = dummyName
+
+                        -- create or get layer
+                        local lyr = LayerManager.getLayerFromName dummyName
+                        if lyr == undefined then
+                            lyr = LayerManager.newLayerFromName dummyName
+                        
+                        lastDummyLayer = lyr
+
+                        -- add dummy to layer
+                        lyr.addNode lastDummy
+                    )
+
+                    destroyDialog NameDummyRollout
+                )
+            )
+
+            tool CreateNamedDummyTool
+            (
+                on mousePoint clickNo do
+                (
+                    if mouse.buttonStates[1] then
+                    (
+                        local r = mapScreenToWorldRay mouse.pos
+                        local rayOrigin = r.pos
+                        local rayDir    = r.dir
+
+                        if rayDir.z != 0 then
+                        (
+                            local t = -rayOrigin.z / rayDir.z
+                            local hitPos = rayOrigin + rayDir * t
+
+                            -- create dummy at hit position
+                            lastDummy = point pos:hitPos size:10 box:true cross:false
+
+                            -- ⛔ stop tool and show naming dialog
+                            stopTool CreateNamedDummyTool
+
+                            -- show window
+                            createDialog NameDummyRollout modal:true
+                        )
+                    )
+                )
+            )
+
+            startTool CreateNamedDummyTool
+            """
+            rt.execute(create_controller)
+        new_controller()
+
+       
+        #create main window
         super(ScatterToolApp, self).__init__(parent=None)
         self.ui = Ui_ScatterToolUI()
         self.ui.setupUi(self)
@@ -239,6 +309,7 @@ class ScatterToolApp(QtWidgets.QMainWindow):
         self.on_toggle_random(self.ui.checkBox_random.isChecked())
         
     # --------------------------- Scatter Painter ---------------------------
+    
     def activate_painter_mode(self):
         """
         Activa el modo Painter en 3ds Max.
@@ -306,25 +377,36 @@ class ScatterToolApp(QtWidgets.QMainWindow):
 
         # Si no hay grupo activo, crear uno temporal
         if not active_group:
-            print("DEBUG ▶ No hay grupo activo, creando un grupo temporal 'PainterFree'")
-            temp_group_name = "PainterFree"
-            active_group = ScatterGroup(temp_group_name)
-            active_group.manager = self.manager  # asigna los objetos fuente
-            active_group.controller.position = rt.point3(*world_pos)
-            if hasattr(self, 'layer') and self.layer:
-                active_group.layer = self.layer
-            else:
-                active_group.layer = rt.LayerManager.newLayerFromName(temp_group_name)
-
-            # opcional: guardar en scatter_tool para reutilizar mientras dure la sesión
-            if hasattr(self, "scatter_tool") and self.scatter_tool:
-                self.scatter_tool.groups.append(active_group)
-
+            active_group = getattr(self, "_painter_free_group", None)
+            if not active_group:
+                print("DEBUG ▶ No hay grupo activo, creando un grupo temporal 'PainterFree'")
+                temp_group_name = "PainterFree"
+                active_group = ScatterGroup(temp_group_name)
+                active_group.manager = self.manager  # asigna los objetos fuente
+                active_group.controller = rt.lastDummy  # usa el último dummy creado como controlado
+                active_group.layer = rt.lastDummyLayer
+                #-------active_group.controller.position = rt.point3(*world_pos)
+                active_group.params = {
+                        "check_collisions": True,
+                        "collision_radius_factor":(self.ui.spinBox_colRadius.value() / 100.0),
+                        "brush_size": self.ui.spin_brush.value(),
+                        "pos_jitterX": (self.ui.spin_PxMin.value(), self.ui.spin_PxMax.value()),
+                        "pos_jitterY": (self.ui.spin_PyMin.value(), self.ui.spin_PyMax.value()),
+                        "pos_jitterZ": (self.ui.spin_PzMin.value(), self.ui.spin_PzMax.value()),
+                        "scale_rangeX": (self.ui.spin_SxMin.value()/100, self.ui.spin_SxMax.value()/100),
+                        "scale_rangeY": (self.ui.spin_SyMin.value()/100, self.ui.spin_SyMax.value()/100),
+                        "scale_rangeZ": (self.ui.spin_SzMin.value()/100, self.ui.spin_SzMax.value()/100),
+                        "rot_x_range": (self.ui.spin_RxMin.value(), self.ui.spin_RxMax.value()),
+                        "rot_y_range": (self.ui.spin_RyMin.value(), self.ui.spin_RyMax.value()),
+                        "rot_z_range": (self.ui.spin_RzMin.value(), self.ui.spin_RzMax.value()),
+                        "orientation_value": self.ui.horizontalSlider_direction.value(),
+                        "source_obj": self.manager.get_random(),
+                        "proportional_scale": self.ui.checkBox_proportionalScale.isChecked(),
+                        "random": self.ui.checkBox_random.isChecked()
+                    }
+                self._painter_free_group = active_group
         # Llamar al método scatter_painter del grupo (con colisión y random)
         active_group.scatter_painter(world_pos)
-
-
-
 
 
 
@@ -924,11 +1006,6 @@ class ScatterToolApp(QtWidgets.QMainWindow):
         print(f"DEBUG: Updated group params: {self.current_group.params}")#DEBUG
  
 
-        # Reposition controller to target center
-        if self.pending_target and rt.isValidNode(self.pending_target):
-            target_bb_min, target_bb_max = rt.nodeGetBoundingBox(self.pending_target, rt.matrix3(1))
-            self.current_group.controller.position = (target_bb_min + target_bb_max) / 2
-
         # ------------------- SAVE TO CONTROLLER -------------------
         ctrl = self.current_group.controller 
         if ctrl and rt.isValidNode(ctrl):  
@@ -1051,6 +1128,9 @@ class ScatterToolApp(QtWidgets.QMainWindow):
         val_var=self.ui.spinBox_briVar.value()
 
         self.scatter_tool.apply_color_variation(hue_var, sat_var, val_var, submat_id,self.current_group,num_variations=5)
+    
+
+
 
 
 # --------------------------- Launch window ---------------------------            
