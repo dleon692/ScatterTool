@@ -86,8 +86,11 @@ class ScatterToolApp(QtWidgets.QMainWindow):
         super(ScatterToolApp, self).__init__(parent=None)
         self.ui = Ui_ScatterToolUI()
         self.ui.setupUi(self)
-        self.setWindowFlags(QtCore.Qt.WindowStaysOnTopHint)
-
+        self.setWindowFlags(
+            QtCore.Qt.Tool |
+            QtCore.Qt.CustomizeWindowHint |
+            QtCore.Qt.WindowCloseButtonHint
+        )
 
         #create group for mode selection
         self.distribution_group = QButtonGroup(self)
@@ -98,6 +101,8 @@ class ScatterToolApp(QtWidgets.QMainWindow):
         self.ui.button_spline.toggled.connect(self.mode_buttons)
         self.ui.button_surface.toggled.connect(self.mode_buttons)
         self.ui.button_painter.toggled.connect(self.mode_buttons)
+        self.ui.button_activate_painter.setCheckable(True)
+
 
         self.pending_target = None   #temp target object before creating the group
         self.pending_mode = None     #temp mode before creating the group
@@ -212,7 +217,7 @@ class ScatterToolApp(QtWidgets.QMainWindow):
     def setup_connections(self):
         self.ui.button_pickSpline.clicked.connect(self.on_pick_spline)
         self.ui.button_pickSurface.clicked.connect(self.on_pick_surface)
-        self.ui.pushButton_add.clicked.connect(self.on_add)
+        #self.ui.pushButton_add.clicked.connect(self.on_add)
         self.ui.pushButton_delete.clicked.connect(self.on_delete)
         self.ui.pushButton_replace.clicked.connect(self.on_replace)
         self.ui.pushButton_addList.clicked.connect(self.on_add_list)
@@ -249,6 +254,7 @@ class ScatterToolApp(QtWidgets.QMainWindow):
 
             self.ui.button_pickSurface.setEnabled(True)
             self.ui.button_pickSpline.setEnabled(False)
+            self.ui.button_activate_painter.setEnabled(False)
 
             #disable distribution mode not applicable to surface
             self.ui.button_distance.setEnabled(False)
@@ -269,6 +275,8 @@ class ScatterToolApp(QtWidgets.QMainWindow):
         elif self.ui.button_spline.isChecked():
             self.ui.button_pickSpline.setEnabled(True)
             self.ui.button_pickSurface.setEnabled(False)
+            self.ui.button_activate_painter.setEnabled(False)
+
 
             # enable distribution
             self.ui.button_distance.setEnabled(True)
@@ -282,8 +290,11 @@ class ScatterToolApp(QtWidgets.QMainWindow):
         
         #painter mode
         elif self.ui.button_painter.isChecked():
+            
             self.ui.button_pickSpline.setEnabled(False)
             self.ui.button_pickSurface.setEnabled(False)
+            self.ui.button_activate_painter.setEnabled(True)
+
 
             #disable distribution modes not applicable to painter
 
@@ -296,12 +307,17 @@ class ScatterToolApp(QtWidgets.QMainWindow):
             self.ui.label_brushSize.setEnabled(True)
 
             #execute painter click function
-            if self.ui.button_painter.isChecked():
-                self.activate_painter_mode()
-                print("UI DEBUG ▶ Painter mode ACTIVATED")
-            else:
-                rt.execute("try(stopTool T) catch()")
-                print("❌ Scatter Painter detenido")
+            self.ui.button_painter.toggled.connect(
+                lambda _: rt.execute("try(stopTool T) catch()") 
+                if not (self.ui.button_painter.isChecked() and self.ui.button_activate_painter.isChecked())
+                else self.activate_painter_mode()
+            )
+
+            self.ui.button_activate_painter.toggled.connect(
+                lambda _: rt.execute("try(stopTool T) catch()") 
+                if not (self.ui.button_painter.isChecked() and self.ui.button_activate_painter.isChecked())
+                else self.activate_painter_mode()
+            )
 
              
    
@@ -409,7 +425,6 @@ class ScatterToolApp(QtWidgets.QMainWindow):
         active_group.scatter_painter(world_pos)
 
 
-
     # --------------------------- Selection callback ---------------------------
     @staticmethod
     def _selection_changed_static():
@@ -422,14 +437,17 @@ class ScatterToolApp(QtWidgets.QMainWindow):
             print(f"DEBUG: error en _selection_changed_static -> {e}")
 
     def on_selection_changed(self):
+
         """Automatically load group parameters if a group's dummy is selected."""
         sel = list(rt.selection)
-        if not sel:
+        if not sel: 
+            self.current_group = None
             return
         obj = sel[0]
         group = self.scatter_tool.get_group_by_controller(obj)
 
         if not group:
+            
             self.current_group = None
             return
 

@@ -26,7 +26,8 @@ class Ui_ScatterToolUI(object):
     def setupUi(self, ScatterToolUI):
         if not ScatterToolUI.objectName():
             ScatterToolUI.setObjectName(u"ScatterToolUI")
-        ScatterToolUI.resize(295, 829)
+        #ScatterToolUI.resize(476, 829)
+        ScatterToolUI.resize(250, 829)
         self.centralwidget = QWidget(ScatterToolUI)
         self.centralwidget.setObjectName(u"centralwidget")
         self.centralwidget.setEnabled(True)
@@ -44,7 +45,7 @@ class Ui_ScatterToolUI(object):
         self.scrollArea.setWidgetResizable(True)
         self.scrollAreaWidgetContents = QWidget()
         self.scrollAreaWidgetContents.setObjectName(u"scrollAreaWidgetContents")
-        self.scrollAreaWidgetContents.setGeometry(QRect(0, -451, 263, 1331))
+        self.scrollAreaWidgetContents.setGeometry(QRect(0, 0, 444, 1291))
         sizePolicy.setHeightForWidth(self.scrollAreaWidgetContents.sizePolicy().hasHeightForWidth())
         self.scrollAreaWidgetContents.setSizePolicy(sizePolicy)
         self.verticalLayout_3 = QVBoxLayout(self.scrollAreaWidgetContents)
@@ -589,8 +590,8 @@ class Ui_ScatterToolUI(object):
         self.spinBox_hueVar.setFrame(True)
         self.spinBox_hueVar.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.UpDownArrows)
         self.spinBox_hueVar.setProperty(u"showGroupSeparator", False)
-        self.spinBox_hueVar.setMinimum(0)
-        self.spinBox_hueVar.setMaximum(100)
+        self.spinBox_hueVar.setMinimum(-180)
+        self.spinBox_hueVar.setMaximum(0)
 
         self.gridLayout_6.addWidget(self.spinBox_hueVar, 2, 2, 1, 1)
 
@@ -601,15 +602,15 @@ class Ui_ScatterToolUI(object):
 
         self.spinBox_satVar = QSpinBox(self.groupBox_colorvar)
         self.spinBox_satVar.setObjectName(u"spinBox_satVar")
-        self.spinBox_satVar.setMinimum(0)
-        self.spinBox_satVar.setMaximum(100)
+        self.spinBox_satVar.setMinimum(-100)
+        self.spinBox_satVar.setMaximum(0)
 
         self.gridLayout_6.addWidget(self.spinBox_satVar, 3, 2, 1, 1)
 
         self.spinBox_briVar = QSpinBox(self.groupBox_colorvar)
         self.spinBox_briVar.setObjectName(u"spinBox_briVar")
-        self.spinBox_briVar.setMinimum(0)
-        self.spinBox_briVar.setMaximum(100)
+        self.spinBox_briVar.setMinimum(-100)
+        self.spinBox_briVar.setMaximum(0)
 
         self.gridLayout_6.addWidget(self.spinBox_briVar, 4, 2, 1, 1)
 
@@ -685,6 +686,13 @@ class Ui_ScatterToolUI(object):
         self.button_pickSurface.setObjectName(u"button_pickSurface")
 
         self.horizontalLayout_9.addWidget(self.button_pickSurface)
+
+        self.button_activate_painter = QPushButton(self.groupBox_dmethod)
+        self.button_activate_painter.setObjectName(u"button_activate_painter")
+        self.button_activate_painter.setMaximumSize(QSize(25, 16777215))
+        self.button_activate_painter.setCheckable(True)
+
+        self.horizontalLayout_9.addWidget(self.button_activate_painter)
 
 
         self.verticalLayout_8.addLayout(self.horizontalLayout_9)
@@ -946,6 +954,38 @@ class Ui_ScatterToolUI(object):
         self.verticalLayout.setContentsMargins(0, 0, 0, 0)
         self.horizontalLayout_02 = QHBoxLayout()
         self.horizontalLayout_02.setObjectName(u"horizontalLayout_02")
+        self.verticalLayout_10 = QVBoxLayout()
+        self.verticalLayout_10.setSpacing(2)
+        self.verticalLayout_10.setObjectName(u"verticalLayout_10")
+        self.pushButton_addList = QPushButton(self.widget_distribute)
+        self.pushButton_addList.setObjectName(u"pushButton_addList")
+        sizePolicy3.setHeightForWidth(self.pushButton_addList.sizePolicy().hasHeightForWidth())
+        self.pushButton_addList.setSizePolicy(sizePolicy3)
+        self.pushButton_addList.setMinimumSize(QSize(0, 0))
+        self.pushButton_addList.setMaximumSize(QSize(25, 25))
+        
+
+        self.verticalLayout_10.addWidget(self.pushButton_addList)
+
+        self.pushButton_delete = QPushButton(self.widget_distribute)
+        self.pushButton_delete.setObjectName(u"pushButton_delete")
+        sizePolicy3.setHeightForWidth(self.pushButton_delete.sizePolicy().hasHeightForWidth())
+        self.pushButton_delete.setSizePolicy(sizePolicy3)
+        self.pushButton_delete.setMaximumSize(QSize(25, 255))
+
+        self.verticalLayout_10.addWidget(self.pushButton_delete)
+
+        self.pushButton_replace = QPushButton(self.widget_distribute)
+        self.pushButton_replace.setObjectName(u"pushButton_replace")
+        sizePolicy3.setHeightForWidth(self.pushButton_replace.sizePolicy().hasHeightForWidth())
+        self.pushButton_replace.setSizePolicy(sizePolicy3)
+        self.pushButton_replace.setMaximumSize(QSize(25, 25))
+
+        self.verticalLayout_10.addWidget(self.pushButton_replace)
+
+
+        self.horizontalLayout_02.addLayout(self.verticalLayout_10)
+
         self.ListScrollBar = QScrollBar(self.widget_distribute)
         self.ListScrollBar.setObjectName(u"ListScrollBar")
         self.ListScrollBar.setOrientation(Qt.Orientation.Vertical)
@@ -959,45 +999,6 @@ class Ui_ScatterToolUI(object):
 
 
         self.verticalLayout.addLayout(self.horizontalLayout_02)
-
-        self.horizontalLayout_03 = QHBoxLayout()
-        self.horizontalLayout_03.setObjectName(u"horizontalLayout_03")
-        self.pushButton_addList = QPushButton(self.widget_distribute)
-        self.pushButton_addList.setObjectName(u"pushButton_addList")
-        sizePolicy1.setHeightForWidth(self.pushButton_addList.sizePolicy().hasHeightForWidth())
-        self.pushButton_addList.setSizePolicy(sizePolicy1)
-
-        self.horizontalLayout_03.addWidget(self.pushButton_addList)
-
-        self.pushButton_add = QPushButton(self.widget_distribute)
-        self.pushButton_add.setObjectName(u"pushButton_add")
-        sizePolicy1.setHeightForWidth(self.pushButton_add.sizePolicy().hasHeightForWidth())
-        self.pushButton_add.setSizePolicy(sizePolicy1)
-
-        self.horizontalLayout_03.addWidget(self.pushButton_add)
-
-
-        self.verticalLayout.addLayout(self.horizontalLayout_03)
-
-        self.horizontalLayout_10 = QHBoxLayout()
-        self.horizontalLayout_10.setObjectName(u"horizontalLayout_10")
-        self.horizontalLayout_10.setContentsMargins(-1, 0, -1, -1)
-        self.pushButton_delete = QPushButton(self.widget_distribute)
-        self.pushButton_delete.setObjectName(u"pushButton_delete")
-        sizePolicy1.setHeightForWidth(self.pushButton_delete.sizePolicy().hasHeightForWidth())
-        self.pushButton_delete.setSizePolicy(sizePolicy1)
-
-        self.horizontalLayout_10.addWidget(self.pushButton_delete)
-
-        self.pushButton_replace = QPushButton(self.widget_distribute)
-        self.pushButton_replace.setObjectName(u"pushButton_replace")
-        sizePolicy1.setHeightForWidth(self.pushButton_replace.sizePolicy().hasHeightForWidth())
-        self.pushButton_replace.setSizePolicy(sizePolicy1)
-
-        self.horizontalLayout_10.addWidget(self.pushButton_replace)
-
-
-        self.verticalLayout.addLayout(self.horizontalLayout_10)
 
         self.horizontalLayout_8 = QHBoxLayout()
         self.horizontalLayout_8.setSpacing(0)
@@ -1082,9 +1083,9 @@ class Ui_ScatterToolUI(object):
     # setupUi
 
     def retranslateUi(self, ScatterToolUI):
-        ScatterToolUI.setWindowTitle(QCoreApplication.translate("ScatterToolUI", u"MainWindow", None))
+        ScatterToolUI.setWindowTitle(QCoreApplication.translate("ScatterToolUI", u"Trane Scatter Tool", None))
         self.scattergroupname.setText("")
-        self.label_version.setText(QCoreApplication.translate("ScatterToolUI", u"Scatter Tool Version 0.0.0", None))
+        self.label_version.setText(QCoreApplication.translate("ScatterToolUI", u"Scatter Tool Version 1.0", None))
         self.label_RosY.setText(QCoreApplication.translate("ScatterToolUI", u"Y", None))
         self.label_RosX.setText(QCoreApplication.translate("ScatterToolUI", u"X", None))
         self.label_RosZ.setText(QCoreApplication.translate("ScatterToolUI", u"Z", None))
@@ -1124,6 +1125,7 @@ class Ui_ScatterToolUI(object):
         self.button_painter.setText(QCoreApplication.translate("ScatterToolUI", u"Painter", None))
         self.button_pickSpline.setText(QCoreApplication.translate("ScatterToolUI", u"Pick Spline", None))
         self.button_pickSurface.setText(QCoreApplication.translate("ScatterToolUI", u"Pick Surface", None))
+        self.button_activate_painter.setText("🖌")
         self.button_elementCount.setText(QCoreApplication.translate("ScatterToolUI", u"Element Count", None))
         self.button_distance.setText(QCoreApplication.translate("ScatterToolUI", u"Distance (cm)", None))
         self.label_brushSize.setText(QCoreApplication.translate("ScatterToolUI", u"      Brush Size (cm)", None))
@@ -1137,10 +1139,9 @@ class Ui_ScatterToolUI(object):
         self.toolButton_distribute.setText(QCoreApplication.translate("ScatterToolUI", u"Distribute Elements", None))
         self.toolButton_position.setText(QCoreApplication.translate("ScatterToolUI", u"Position (-999 / 999cm)", None))
         self.toolButton_Rotation.setText(QCoreApplication.translate("ScatterToolUI", u"Rotation (0\u00b0 / 360\u00b0)", None))
-        self.pushButton_addList.setText(QCoreApplication.translate("ScatterToolUI", u"Add Selection", None))
-        self.pushButton_add.setText(QCoreApplication.translate("ScatterToolUI", u"Add", None))
-        self.pushButton_delete.setText(QCoreApplication.translate("ScatterToolUI", u"Delete", None))
-        self.pushButton_replace.setText(QCoreApplication.translate("ScatterToolUI", u"Replace", None))
+        self.pushButton_addList.setText(QCoreApplication.translate("ScatterToolUI", u"\u2795", None))
+        self.pushButton_delete.setText(QCoreApplication.translate("ScatterToolUI", u"\u2796", None))
+        self.pushButton_replace.setText(QCoreApplication.translate("ScatterToolUI", u"\U0001F504", None))
         self.label_frecuencyPercent.setText(QCoreApplication.translate("ScatterToolUI", u"Element Frecuency", None))
         self.label_percent.setText(QCoreApplication.translate("ScatterToolUI", u" %", None))
         self.label_ViewDisplay.setText(QCoreApplication.translate("ScatterToolUI", u"Viewport Display %", None))

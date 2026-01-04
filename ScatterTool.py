@@ -471,10 +471,6 @@ class ScatterGroup:
         self.instances.append(ScatterInstance(inst))
 
         print(f"✅ Instancia de '{source_obj.name}' creada en {world_pos}")
-
-
-    
-
    
     def check_collisions(self, candidate, placed_points, obj, min_distance_factor=1.0):
         # Return True if candidate collides (too close) with any placed point.
@@ -566,9 +562,10 @@ class ScatterTool:
         self._load_existing_groups()
 
     def _load_existing_groups(self):
-        """Load existing scatter groups from the scene based on naming convention."""
+        """Load existing scatter groups from the scene."""
+        self.groups = [] 
         for obj in rt.objects:
-            if obj.name.endswith("_CTRL") and rt.isValidNode(obj): # Check if it's a valid node
+            if rt.isValidNode(obj): # Check if it's a valid node
                 group_name = rt.getUserProp(obj, "ScatterGroup") 
                 if group_name:# Check if user property exists
                     # Check if group already loaded
@@ -591,7 +588,7 @@ class ScatterTool:
                     "rot_z_range": (0,0),
                     "proportional_scale": rt.getUserProp(obj,"ScatterProportionalScale")=="True",
                     "random": rt.getUserProp(obj,"ScatterRandom")=="True",
-                    "viewport_percentage": int(rt.getUserProp(obj,"ScatterViewportPercentage") or 100)
+                    "viewport_percentage": int(rt.getUserProp(obj,"ScatterViewportDisplay") or 100)
                     }
                     elements = rt.getUserProp(obj, "ScatterElements")
                     if elements:
@@ -654,12 +651,6 @@ class ScatterTool:
 
         obj = sel[0]
         return self.get_group_by_controller(obj)
-
-    def get_group(self, name):
-        for g in self.groups:
-            if g.name == name:
-                return g
-        return None
     
     def get_group_by_controller(self, obj):
         for g in self.groups:
@@ -667,7 +658,18 @@ class ScatterTool:
                 if g.controller == obj or obj.parent == g.controller:
                     print(f"DEBUG: Found group '{g.name}' by {obj.name}")
                     return g
-        return None
+            print(f"DEBUG-get_group_by_controller: Group not in memory for '{obj.name}', reloading groups...")
+            self._load_existing_groups()
+
+            #try again after reloading
+            for g in self.groups:
+                if rt.isValidNode(g.controller):
+                    if g.controller == obj or obj.parent == g.controller:
+                        print(f"DEBUG: Found group '{g.name}' after reload")
+                        return g
+
+            print(f"DEBUG-get_group_by_controller: No group found for '{obj.name}'")
+            return None
 
     def apply_color_variation(self,hue_var, sat_var, val_var,submat_id,group=None,num_variations=5):
 
