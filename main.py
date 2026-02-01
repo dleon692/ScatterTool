@@ -2,6 +2,7 @@ import os, sys
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 if BASE_DIR not in sys.path:
     sys.path.append(BASE_DIR)
+import qtmax
 from PySide2 import QtWidgets,QtCore
 from ui_scattertool_UI import Ui_ScatterToolUI
 from scattertool import ScatterTool,ElementsManager,ScatterGroup
@@ -10,6 +11,7 @@ from PySide2.QtCore import QStringListModel
 from PySide2.QtWidgets import QButtonGroup
 import random
 import builtins
+
 
 class ScatterToolApp(QtWidgets.QMainWindow):
     def __init__(self):
@@ -81,9 +83,8 @@ class ScatterToolApp(QtWidgets.QMainWindow):
             rt.execute(create_controller)
         new_controller()
 
-       
         #create main window
-        super(ScatterToolApp, self).__init__(parent=None)
+        super(ScatterToolApp, self).__init__(parent=qtmax.GetQMaxMainWindow())
         self.ui = Ui_ScatterToolUI()
         self.ui.setupUi(self)
         self.setWindowFlags(
@@ -102,7 +103,6 @@ class ScatterToolApp(QtWidgets.QMainWindow):
         self.ui.button_surface.toggled.connect(self.mode_buttons)
         self.ui.button_painter.toggled.connect(self.mode_buttons)
         self.ui.button_activate_painter.setCheckable(True)
-
 
         self.pending_target = None   #temp target object before creating the group
         self.pending_mode = None     #temp mode before creating the group
@@ -183,8 +183,6 @@ class ScatterToolApp(QtWidgets.QMainWindow):
 
         self.setup_connections()
 
-
-
         #selection callback
         try:
             ms_script = 'python.Execute "scattertool_app_instance._selection_changed_static()"'
@@ -204,10 +202,7 @@ class ScatterToolApp(QtWidgets.QMainWindow):
             self.on_selection_changed()  # Load initial selection if any
         except Exception:
             pass 
-
-        
-
-
+       
     # --------------------------- UI & list handling ---------------------------
     def refresh_listview(self):
         self.manager.elements = [obj for obj in self.manager.get_all() if rt.isValidNode(obj)]
@@ -319,39 +314,50 @@ class ScatterToolApp(QtWidgets.QMainWindow):
                 else self.activate_painter_mode()
             )
 
-             
-   
-
         self.on_toggle_random(self.ui.checkBox_random.isChecked())
         
     # --------------------------- Scatter Painter ---------------------------
+    def draw_brush_preview(self, pos):
+        """Draw a circle helper at the given position to visualize the brush size."""
+        brush_radius = self.ui.spin_brush.value()
+        if brush_radius <= 0:
+            return
+
+        # MaxScript para crear un helper temporal tipo circle
+        ms = f'''
+        if isValidNode $BrushPreview do delete $BrushPreview
+        bp = circle name:"BrushPreview" radius:{brush_radius} pos:(point3 {pos[0]} {pos[1]} {pos[2]})
+        bp.wirecolor = yellow
+        bp.boxmode = false
+        
+        '''
+        rt.execute(ms)
+
     
     def activate_painter_mode(self):
         """
-        Activa el modo Painter en 3ds Max.
-        Al hacer clic y arrastrar sobre la escena, se crean instancias
-        de objetos usando la función scatter_place_at_point().
+        Activate Painter mode in 3ds Max.
+        Clicking and dragging on the scene creates instances of objects 
+        using the function scatter_place_at_point().
         """
 
-        # Primero, intentamos detener cualquier tool T activa
+        # First, we try to stop any active tool T
         try:
             rt.execute("try(stopTool T) catch()")
-            print("✅  Painter mode detenido previamente (si estaba activo)")
+            print("✅  Painter mode previously stopped (if it was active).")
         except RuntimeError as e:
-            print("⚠️ No se pudo detener la tool previamente:", e)
+            print("⚠️ The tool could not be stopped previously:", e)
 
-        # Exponemos la instancia actual de la app a MaxScript
+        # Expose the application instance to builtins for access in MaxScript
         import builtins
         builtins.scattertool_app_instance = self
-        print("PY ▶ scattertool_app_instance asignado")
+        print("PY ▶ scattertool_app_instance assigned")
 
-        # Definimos el MaxScript de la tool
+        # MaxScript code for the painter tool
         ms_tool = r'''
-    tool T
-    (
-        on mouseMove clickNo do
+        tool T
         (
-            if mouse.buttonStates[1] then
+            on mouseMove clickNo do
             (
                 local r = mapScreenToWorldRay mouse.pos
                 local hits = intersectRayScene r
@@ -361,30 +367,76 @@ class ScatterToolApp(QtWidgets.QMainWindow):
                     local hitData = hits[1][2]
                     local hitPos = if isProperty hitData #pos then hitData.pos else [0,0,0]
 
-                    local py_cmd = "scattertool_app_instance.scatter_place_at_point((" +
-                                (hitPos.x as string) + "," +
-                                (hitPos.y as string) + "," +
-                                (hitPos.z as string) + "))"
-                    python.execute py_cmd
+                    -- Llamada a scatter_place_at_point solo si el botón izquierdo está presionado
+                    if mouse.buttonStates[1] then
+                    (
+                        local py_cmd = "scattertool_app_instance.scatter_place_at_point((" +
+                                        (hitPos.x as string) + "," +
+                                        (hitPos.y as string) + "," +
+                                        (hitPos.z as string) + "))"
+                        python.execute py_cmd
+                    )
+
+                    -- Draw brush preview siempre que haya un hit
+                    local py_preview_cmd = "scattertool_app_instance.draw_brush_preview((" +
+                                            (hitPos.x as string) + "," +
+                                            (hitPos.y as string) + "," +
+                                            (hitPos.z as string) + "))"
+                    python.execute py_preview_cmd
                 )
                 else
                 (
-                    print "No sobre superficie"
+                    print "Not on surface"
                 )
             )
         )
-    )
-    startTool T
-    '''
-        # Ejecutamos la tool en 3ds Max
+        startTool T
+        '''
+
+        # Execute the MaxScript to activate the painter tool
         try:
             rt.execute(ms_tool)
-            print("✅ Painter mode activado desde Python")
+            print("✅ Painter mode activated successfully.")
         except RuntimeError as e:
-            print("❌ Error al activar  Painter mode:", e)
+            print("❌ Error activating Painter mode:", e)
+
+
+    # --------------------------- Scatter placement functions ---------------------------
+    def scatter_with_brush(self,group, world_pos):
+        radius = self.ui.spin_brush.value()
+        if radius <= 0:
+            print("DEBUG ▶ Brush radius is zero or negative, skipping scatter.")
+            return
+        #---for future use
+        #density = self.ui.spin_density.value()
+        density = 0.02  # Placeholder density value
+
+        area= 3.1416 * (radius ** 2)
+        count= max(1, int(area * density))
+        count=min(count, 10)  #limit max count to avoid overpopulation
+        for _ in range(count):
+            angle = random.uniform(0, 2 * 3.1416)
+            r= random.uniform(0, radius)
+            final_pos = [
+            world_pos[0] + math.cos(angle) * r,
+            world_pos[1] + math.sin(angle) * r,
+            world_pos[2]
+        ]
+
+        group.scatter_painter(final_pos)
+
+        # Calculate random offset within brush radius
+        """offset= [
+            random.uniform(-radius, radius),  # X
+            random.uniform(-radius, radius),  # Y
+            0   # Z
+        ]
+        final_pos = [world_pos[i] + offset[i] for i in range(3)]
+        print(f"debug ▶ radius: {radius}, world_pos: {world_pos}, offset: {offset}, final_pos: {final_pos}")
+        group.scatter_painter(final_pos)"""
 
     def scatter_place_at_point(self,world_pos):
-        print("PY ▶ scatter_place_at_point recibido:", world_pos)
+        
 
         # Intenta obtener un grupo activo
         active_group = None
@@ -395,11 +447,11 @@ class ScatterToolApp(QtWidgets.QMainWindow):
         if not active_group:
             active_group = getattr(self, "_painter_free_group", None)
             if not active_group:
-                print("DEBUG ▶ No hay grupo activo, creando un grupo temporal 'PainterFree'")
+                print("DEBUG ▶ There is no active group, creating a temporary group 'PainterFree'")
                 temp_group_name = "PainterFree"
                 active_group = ScatterGroup(temp_group_name)
-                active_group.manager = self.manager  # asigna los objetos fuente
-                active_group.controller = rt.lastDummy  # usa el último dummy creado como controlado
+                active_group.manager = self.manager  # assign elements manager
+                active_group.controller = rt.lastDummy  # assign last created dummy as controller
                 active_group.layer = rt.lastDummyLayer
                 #-------active_group.controller.position = rt.point3(*world_pos)
                 active_group.params = {
@@ -421,8 +473,8 @@ class ScatterToolApp(QtWidgets.QMainWindow):
                         "random": self.ui.checkBox_random.isChecked()
                     }
                 self._painter_free_group = active_group
-        # Llamar al método scatter_painter del grupo (con colisión y random)
-        active_group.scatter_painter(world_pos)
+        # call scatter_painter on the active group
+        self.scatter_with_brush(active_group, world_pos)
 
 
     # --------------------------- Selection callback ---------------------------
@@ -623,7 +675,6 @@ class ScatterToolApp(QtWidgets.QMainWindow):
         #update group name
         self.show_group_name()
 
-
     # --------------------------- Cleanup callback ---------------------------
     def closeEvent(self, event):
         if hasattr(self, 'sel_callback') and self.sel_callback:
@@ -653,7 +704,6 @@ class ScatterToolApp(QtWidgets.QMainWindow):
         except Exception as e:
             print(f"ERROR: Failed to set viewport display -> {e}")
     
-
      # --------------------------- Box / Mesh View ---------------------------# 
     def on_box_view(self,enable=True):
         """Toggle display as box for the currently selected group's instances."""
@@ -701,7 +751,6 @@ class ScatterToolApp(QtWidgets.QMainWindow):
             self.ui.button_box.blockSignals(False)
             self.ui.button_mesh.blockSignals(False)
             return
-
 
     # --------------------------- Pick spline / surface ---------------------------
     def on_pick_spline(self):
@@ -847,7 +896,6 @@ class ScatterToolApp(QtWidgets.QMainWindow):
         #determine if position jitter controls should be enabled
         enable_position= enabled and not surface_or_painter_mode
     
-
         self.ui.button_shuffle.setEnabled(enabled)
         self.ui.spin_PxMin.setEnabled(enable_position)
         self.ui.spin_PxMax.setEnabled(enable_position)
@@ -914,9 +962,10 @@ class ScatterToolApp(QtWidgets.QMainWindow):
 
     def on_update(self):
         print("DEBUG: Starting scatter update...")#DEBUG
-              
+            
         source_obj = self.manager.get_random()
         if not source_obj:
+            rt.messageBox("No item has been selected for scatter.", title="Scatter Tool Warning")
             print("No source object selected.")
             return
         
@@ -932,7 +981,7 @@ class ScatterToolApp(QtWidgets.QMainWindow):
         count = self.ui.spin_elementCount.value() if self.ui.button_elementCount.isChecked() else None
         distance = self.ui.spin_distance.value() if self.ui.button_distance.isChecked() else None
         brush_size = self.ui.spin_brush.value()
-      
+    
         #check if randomization is False
         if self.ui.checkBox_random.isChecked():
             pos_jitterX = (self.ui.spin_PxMin.value(), self.ui.spin_PxMax.value())
@@ -1004,7 +1053,12 @@ class ScatterToolApp(QtWidgets.QMainWindow):
             # If no group is selected, ensure we have a target and mode picked
             if self.current_group is None:
                 if self.pending_target is None or self.pending_mode != mode:
-                    raise ValueError("You must pick a valid target (Spline or Surface) before updating scatter.")
+                    rt.messageBox(
+                        "You must pick a valid target (Spline or Surface) before updating scatter.",
+                        title="Scatter Tool Warning"
+                        )
+                    print("DEBUG: No valid target.")
+                    return  # Stop processing if no valid target
         # ------------- Create group dynamically -------------
                 self.current_group=self.scatter_tool.create_group(
                     source_obj=source_obj,
@@ -1012,7 +1066,7 @@ class ScatterToolApp(QtWidgets.QMainWindow):
                     mode=mode
                 ) #placeholder to avoid errors
 
-                 #update group name
+                #update group name
                 self.show_group_name()
                 print(f"DEBUG: Created new group: {self.current_group.name}")#DEBUG
                     
@@ -1022,7 +1076,6 @@ class ScatterToolApp(QtWidgets.QMainWindow):
         # Update current group's params
         self.current_group.params.update(params_dict)
         print(f"DEBUG: Updated group params: {self.current_group.params}")#DEBUG
- 
 
         # ------------------- SAVE TO CONTROLLER -------------------
         ctrl = self.current_group.controller 
@@ -1137,6 +1190,7 @@ class ScatterToolApp(QtWidgets.QMainWindow):
         # ------------------- Apply color variation -------------------   
     def on_apply_color_variation (self):
         if not self.current_group or not rt.isValidNode(self.current_group.controller):
+            rt.messageBox("No current scatter group selected.", title="Scatter Tool Warning")
             print("No current scatter group selected.")
             return
 
@@ -1147,10 +1201,6 @@ class ScatterToolApp(QtWidgets.QMainWindow):
 
         self.scatter_tool.apply_color_variation(hue_var, sat_var, val_var, submat_id,self.current_group,num_variations=5)
     
-
-
-
-
 # --------------------------- Launch window ---------------------------            
 _WINDOW = None
 def launch():

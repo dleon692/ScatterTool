@@ -633,7 +633,7 @@ class ScatterTool:
         elif mode == "painter":
             new_group.set_painter(target_obj=None)
             new_group.scatter_painter(source_obj)
-         
+        
         else:
             new_group.set_surface(target_obj)
             new_group.scatter_surface(source_obj)
@@ -658,6 +658,8 @@ class ScatterTool:
                 if g.controller == obj or obj.parent == g.controller:
                     print(f"DEBUG: Found group '{g.name}' by {obj.name}")
                     return g
+            #rt.messagebox(f"The selection is not a valid controller.", title="Scatter Tool Warning")
+            
             print(f"DEBUG-get_group_by_controller: Group not in memory for '{obj.name}', reloading groups...")
             self._load_existing_groups()
 
@@ -667,7 +669,7 @@ class ScatterTool:
                     if g.controller == obj or obj.parent == g.controller:
                         print(f"DEBUG: Found group '{g.name}' after reload")
                         return g
-
+            #rt.messagebox(f"'{obj.name}' is not a valid scatter controller.", title="Scatter Tool Warning")
             print(f"DEBUG-get_group_by_controller: No group found for '{obj.name}'")
             return None
 
