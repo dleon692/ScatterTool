@@ -3,13 +3,19 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 if BASE_DIR not in sys.path:
     sys.path.append(BASE_DIR)
 import qtmax
-from PySide2 import QtWidgets,QtCore
 from ui_scattertool_UI import Ui_ScatterToolUI
 from scattertool import ScatterTool,ElementsManager,ScatterGroup
 from pymxs import runtime as rt
-from PySide2.QtCore import QStringListModel
-from PySide2.QtWidgets import QButtonGroup
+try:
+    from PySide2 import QtWidgets,QtCore
+    from PySide2.QtCore import QStringListModel
+    from PySide2.QtWidgets import QButtonGroup
+except ImportError:
+    from PySide6 import QtWidgets,QtCore
+    from PySide6.QtCore import QStringListModel
+    from PySide6.QtWidgets import QButtonGroup
 import random
+import math
 import builtins
 
 
@@ -66,7 +72,7 @@ class ScatterToolApp(QtWidgets.QMainWindow):
                             local hitPos = rayOrigin + rayDir * t
 
                             -- create dummy at hit position
-                            lastDummy = point pos:hitPos size:10 box:true cross:false
+                            lastDummy = point pos:hitPos size:500 box:true cross:false
 
                             -- ⛔ stop tool and show naming dialog
                             stopTool CreateNamedDummyTool
@@ -202,7 +208,7 @@ class ScatterToolApp(QtWidgets.QMainWindow):
             self.on_selection_changed()  # Load initial selection if any
         except Exception:
             pass 
-       
+    
     # --------------------------- UI & list handling ---------------------------
     def refresh_listview(self):
         self.manager.elements = [obj for obj in self.manager.get_all() if rt.isValidNode(obj)]
@@ -222,10 +228,10 @@ class ScatterToolApp(QtWidgets.QMainWindow):
         self.ui.spinBox_viewDisp.valueChanged.connect(self.on_viewport_disp_changed)
         self.ui.pushButton_apply.clicked.connect(self.on_apply_color_variation)
     
-   # --------------------------- Mode buttons ---------------------------
+    # --------------------------- Mode buttons ---------------------------
 
     def mode_buttons(self):
-         # reset buttons
+        # reset buttons
         widgets_to_enable = [
             self.ui.spin_brush, self.ui.label_brushSize,
             self.ui.button_pickSpline, self.ui.button_pickSurface,
@@ -243,7 +249,7 @@ class ScatterToolApp(QtWidgets.QMainWindow):
         ]
         for w in widgets_to_enable:
             w.setEnabled(True)
-     
+
         #surface mode
         if self.ui.button_surface.isChecked():
 
@@ -258,15 +264,13 @@ class ScatterToolApp(QtWidgets.QMainWindow):
             self.ui.label_brushSize.setEnabled(False)
             self.ui.spin_brush.setEnabled(False)
 
-           
-
             #position jitter disable
             for w in (self.ui.spin_PxMin, self.ui.spin_PxMax,
-                  self.ui.spin_PyMin, self.ui.spin_PyMax,
-                  self.ui.spin_PzMin, self.ui.spin_PzMax):
+                    self.ui.spin_PyMin, self.ui.spin_PyMax,
+                    self.ui.spin_PzMin, self.ui.spin_PzMax):
                 w.setEnabled(False) 
 
-         #spline mode
+        #spline mode
         elif self.ui.button_spline.isChecked():
             self.ui.button_pickSpline.setEnabled(True)
             self.ui.button_pickSurface.setEnabled(False)
@@ -303,7 +307,7 @@ class ScatterToolApp(QtWidgets.QMainWindow):
 
             #execute painter click function
             self.ui.button_painter.toggled.connect(
-                lambda _: rt.execute("try(stopTool T) catch()") 
+                lambda _: rt.execute("try(stopTool T) catch() if isValidNode $BrushPreview do delete $BrushPreview") 
                 if not (self.ui.button_painter.isChecked() and self.ui.button_activate_painter.isChecked())
                 else self.activate_painter_mode()
             )
@@ -467,7 +471,7 @@ class ScatterToolApp(QtWidgets.QMainWindow):
                         "rot_x_range": (self.ui.spin_RxMin.value(), self.ui.spin_RxMax.value()),
                         "rot_y_range": (self.ui.spin_RyMin.value(), self.ui.spin_RyMax.value()),
                         "rot_z_range": (self.ui.spin_RzMin.value(), self.ui.spin_RzMax.value()),
-                        "orientation_value": self.ui.horizontalSlider_direction.value(),
+                        "direction_value": self.ui.horizontalSlider_direction.value(),
                         "source_obj": self.manager.get_random(),
                         "proportional_scale": self.ui.checkBox_proportionalScale.isChecked(),
                         "random": self.ui.checkBox_random.isChecked()
@@ -541,7 +545,7 @@ class ScatterToolApp(QtWidgets.QMainWindow):
         val_prop = rt.getUserProp(ctrl, "ScatterProportionalScale")
         proportional = val_prop if isinstance(val_prop, bool) else str(val_prop).lower() == "true"
         self.ui.checkBox_proportionalScale.setChecked(proportional)
-       
+
         val_box = rt.getUserProp(ctrl, "ScatterDisplayAsBox")
         self.ui.button_box.setChecked(val_box if isinstance(val_box, bool) else str(val_box).lower() == "true")
 
@@ -640,7 +644,7 @@ class ScatterToolApp(QtWidgets.QMainWindow):
         finally:
             self.ui.spinBox_viewDisp.blockSignals(False)
 
-         # --- Update internal params dict ---
+        # --- Update internal params dict ---
         group.params.update({
             "count": self.ui.spin_elementCount.value(),
             "distance": self.ui.spin_distance.value(),
@@ -654,7 +658,7 @@ class ScatterToolApp(QtWidgets.QMainWindow):
             "rot_x_range": (self.ui.spin_RxMin.value(), self.ui.spin_RxMax.value()),
             "rot_y_range": (self.ui.spin_RyMin.value(), self.ui.spin_RyMax.value()),
             "rot_z_range": (self.ui.spin_RzMin.value(), self.ui.spin_RzMax.value()),
-            "orientation_value": self.ui.horizontalSlider_direction.value(),
+            "direction_value": self.ui.horizontalSlider_direction.value(),
             "source_obj": self.manager.get_random(),
             "proportional_scale": proportional,
             "random": random_enabled
@@ -682,7 +686,7 @@ class ScatterToolApp(QtWidgets.QMainWindow):
                 rt.callbacks.removeScripts(rt.Name('selectionSetChanged'))
             except Exception as e:
                 print(f"Error removing callback: {e}")
-  
+
         if hasattr(builtins, "scattertool_app_instance"):
             del builtins.scattertool_app_instance
         super().closeEvent(event)
@@ -704,7 +708,7 @@ class ScatterToolApp(QtWidgets.QMainWindow):
         except Exception as e:
             print(f"ERROR: Failed to set viewport display -> {e}")
     
-     # --------------------------- Box / Mesh View ---------------------------# 
+    # --------------------------- Box / Mesh View ---------------------------# 
     def on_box_view(self,enable=True):
         """Toggle display as box for the currently selected group's instances."""
         # Find the group associated with the selected controller
@@ -947,7 +951,7 @@ class ScatterToolApp(QtWidgets.QMainWindow):
     def on_direction_changed(self, value):
     #DEBUG-NORMAL
     
-       # update slider and spinbox values
+        # update slider and spinbox values
         self.ui.spinBox_direction.blockSignals(True)
         self.ui.spinBox_direction.setValue(value)
         self.ui.spinBox_direction.blockSignals(False)
@@ -1026,9 +1030,9 @@ class ScatterToolApp(QtWidgets.QMainWindow):
             "proportional_scale": proportional,
             "collision_enabled": self.ui.checkBox_collision.isChecked(),
             "collision_radius": self.ui.spinBox_colRadius.value(),
-            "orientation_value": self.ui.horizontalSlider_direction.value(),
+            "direction_value": self.ui.horizontalSlider_direction.value(),
         }
-       
+    
         # Check if there's a selected group in the scene
         selected_group = self.scatter_tool.get_group_by_selection()
         if selected_group:
@@ -1075,6 +1079,17 @@ class ScatterToolApp(QtWidgets.QMainWindow):
 
         # Update current group's params
         self.current_group.params.update(params_dict)
+        if self.pending_target and rt.isValidNode(self.pending_target):
+
+            self.current_group.target = self.pending_target
+
+            if rt.superClassOf(self.pending_target) == rt.Shape:
+                self.current_group.spline = self.pending_target
+                self.current_group.surface = None
+
+            else:
+                self.current_group.surface = self.pending_target
+                self.current_group.spline = None
         print(f"DEBUG: Updated group params: {self.current_group.params}")#DEBUG
 
         # ------------------- SAVE TO CONTROLLER -------------------

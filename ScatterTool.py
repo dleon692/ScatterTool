@@ -143,28 +143,28 @@ class ScatterGroup:
         
     #clear instances
     def clear_instances(self, delete_nodes=False):
-        # if no valid controller, exit
-        if not hasattr(self, 'controller') or not rt.isValidNode(self.controller):
-            return
-        #if no instances, exit
-        if not hasattr(self, 'instances') or not self.instances:
+        if not hasattr(self, "controller") or not rt.isValidNode(self.controller):
+            print("DEBUG: Invalid controller.")
             return
 
-        valid_instances = [inst for inst in self.instances if getattr(inst, 'node', None) and rt.isValidNode(inst.node)]
-        if not valid_instances:
+        children = list(self.controller.children)
+
+        if not children:
+            print("DEBUG: No instances under controller.")
+            self.instances = []
             return
+
         if delete_nodes:
-            for inst in self.instances:
-                node = getattr(inst, 'node', None)
-                if node and rt.isValidNode(node):
-                    print(f"DEBUG: Deleting node {node.name}")
-                    rt.clearSelection()
-                    rt.select(node)
-                    rt.delete(node)
-        # Remove invalid instances from the list
-        self.instances = [inst for inst in self.instances if getattr(inst, 'node', None) and rt.isValidNode(inst.node)]
-        remaining_nodes = [n.name for n in rt.objects if n.name.startswith(f"{self.name}_")]
-        print(f"DEBUG: Remaining nodes in scene with group prefix = {remaining_nodes}")
+            for child in children:
+                if rt.isValidNode(child):
+                    print(f"DEBUG: Deleting node {child.name}")
+                    rt.delete(child)
+
+        # clear cached instances list
+        self.instances = []
+
+        remaining = [c.name for c in self.controller.children if rt.isValidNode(c)]
+        print(f"DEBUG: Remaining children under '{self.name}' = {remaining}")
 
     #show instance as box
     def set_display_as_box(self,enable=True):
@@ -269,7 +269,10 @@ class ScatterGroup:
         rt.rotate(inst, rt.eulerAngles(rx, ry, rz))
     
     def scatter_spline(self,source_obj):
+        print("the instances list before scattering on spline:", self.instances)
         self.clear_instances(delete_nodes=True)
+        print("DEBUG: cleared existing instances before scattering on spline.")
+        print("the instances list after clearing:", self.instances)
         if not rt.isValidNode(self.spline):
             print("ERROR: invalid spline target.")
             return 
@@ -341,14 +344,15 @@ class ScatterGroup:
             self.controller.rotation = ctrl_rot
 
         print(f"✅ {instance_count} instances of '{source_obj.name}' were created along the spline.")
+        print("the instances list after scattering on spline:", self.instances)
 
-    def scatter_surface(self,source_obj):
+    def scatter_surface(self, source_obj):
         self.clear_instances(delete_nodes=True)
 
         if not (rt.isValidNode(source_obj) and rt.isValidNode(self.surface)):
             print("ERROR: Select a source object and Editable Poly surface.")
             return
-        
+
         if not rt.classof(self.surface) == rt.Editable_Poly:
             try:
                 self.surface = rt.convertToPoly(self.surface)
@@ -356,89 +360,71 @@ class ScatterGroup:
             except Exception as e:
                 print(f"ERROR: Failed to convert surface to Editable Poly. {e}")
                 return
-        
+
         count = self.params.get("count")
         if count is None:
-            print("DEBUG: 'count' parameter is not defined. Scatter aborted.") #DEBUG
+            print("DEBUG: 'count' parameter is not defined. Scatter aborted.")
             return
-        
-        #determinate bounding box limit(surface)
+
+        # bounding box
         bb_min, bb_max = rt.nodeGetBoundingBox(self.surface, rt.matrix3(1))
-        
-        #Get the mesh to access your faces
-        mesh = rt.snapshotAsMesh(self.surface)
-        face_count = mesh.numfaces
-    
+
         created = 0
         attempts = 0
-        max_attempts = count * 10  # To avoid infinite loop if intersections fail
+        max_attempts = count * 10
+
         placed_points = []
 
-        collision= self.params.get("check_collisions", False)
-        min_distance_factor= (self.ui.spinBox_colRadius.value()/100) if collision else 0.0
+        collision = self.params.get("check_collisions", False)
+        min_distance_factor =  self.params.get("collision_radius_factor", 0.1) if collision else 0.0
+        
 
         while created < count and attempts < max_attempts:
             attempts += 1
 
-            # Random point in the Bounding Box
+            # random X,Y in bounding box
             rand_x = random.uniform(bb_min.x, bb_max.x)
             rand_y = random.uniform(bb_min.y, bb_max.y)
-            rand_z = random.uniform(bb_min.z, bb_max.z)
-            candidate = rt.point3(rand_x, rand_y, rand_z)
 
-            # check if the object is very close to each other
+            # raycast from above
+            ray_origin = rt.point3(rand_x, rand_y, bb_max.z + 1000)
+            ray_dir = rt.point3(0, 0, -1)
+
+            hit = rt.intersectRay(self.surface, rt.ray(ray_origin, ray_dir))
+
+            if not hit:
+                continue
+
+            candidate = hit.pos
+            face_normal = rt.point3(0,0,1)
+
+            # collision check
             if collision and self.check_collisions(candidate, placed_points, source_obj, min_distance_factor):
                 continue
 
-            for i in range(1, face_count + 1):
-                try:
-                    indices = rt.getFace(mesh, i)  # tupla con 3 índices
-                    verts = [rt.getVert(mesh, indices[j]) for j in range(3)]
-                    v0, v1, v2 = verts
-                    print(f"DEBUG-Normals: Face {i} vertices: {v0}, {v1}, {v2}")
+            # random source
+            random_source = self.manager.get_random() if hasattr(self, 'manager') and self.manager.get_all() else source_obj
 
-                    def same_side(p1, p2, a, b):
-                        cp1 = rt.cross(b - a, p1 - a)
-                        cp2 = rt.cross(b - a, p2 - a)
-                        return rt.dot(cp1,cp2) >= 0
+            try:
+                inst = rt.instance(random_source)
+                inst.position = candidate
+                inst.parent = self.controller
+                self.layer.addNode(inst)
 
-                    inside = (
-                        same_side(candidate, v0, v1, v2) and
-                        same_side(candidate, v1, v0, v2) and
-                        same_side(candidate, v2, v0, v1)
-                    )
+                self.apply_random_scale_and_rotation(inst)
 
-                    if inside:
-                        #get a random source object from the list
-                        random_source = self.manager.get_random() if hasattr(self,'manager') and self.manager.get_all() else source_obj
-                        #get normal on surface face for orientation
-                        face_normal = rt.getFaceNormal(mesh, i)
-                        if not face_normal:
-                            print(f"ERROR-Normal: getFaceNormal returned None for face {i}")
-                            continue
-                        face_normal = rt.normalize(face_normal)
-                        print(f"DEBUG-Normal: Face {i} normal: {face_normal}")
-                        #create instance
-                        inst = rt.instance(random_source)
-                        inst.position = candidate
-                        inst.parent = self.controller
-                        self.layer.addNode(inst)
+                self.instances.append(ScatterInstance(inst, normal=face_normal))
 
-                        self.apply_random_scale_and_rotation(inst)
-                        
-                        #store normal on each instance for future orientation adjustments
-                        self.instances.append(ScatterInstance(inst, normal=face_normal))
-                        created += 1
+                created += 1
+                placed_points.append((candidate, random_source))
 
-                        # store tuple (position, source) so collision checks can use source bbox
-                        placed_points.append((candidate, random_source))
-                        break
-                except Exception as e:
-                    print(f"Error on face {i}: {e}")
-        if created<count:
-            print(f"surface is too small to create{count},were just created {created} along the surface.")
-        elif count==created:
-            print(f"{count} instances of '{source_obj.name}' were created along the surface.")
+            except Exception as e:
+                print(f"ERROR creating instance: {e}")
+
+        if created < count:
+            print(f"Surface is too small to create {count}, only {created} were created.")
+        else:
+            print(f"{created} instances of '{source_obj.name}' were created along the surface.")
 
     def scatter_painter (self,world_pos):
         source_obj = self.manager.get_random() if self.manager and self.manager.get_all() else None
@@ -471,7 +457,7 @@ class ScatterGroup:
         self.instances.append(ScatterInstance(inst))
 
         print(f"✅ Instancia de '{source_obj.name}' creada en {world_pos}")
-   
+
     def check_collisions(self, candidate, placed_points, obj, min_distance_factor=1.0):
         # Return True if candidate collides (too close) with any placed point.
         bb_min, bb_max = rt.nodeGetBoundingBox(obj, rt.matrix3(1))
@@ -500,60 +486,87 @@ class ScatterGroup:
             if dist < max(separation, separation2):
                 return True
         return False
-    
-    def normal_direction(self,slider_value):
-    
-        """Update orientation of instances based on slider value."""    
-         
+    def normal_direction(self, slider_value):
+
+        """Update orientation of instances based on slider value."""
+
         slider_value = int(slider_value)
 
         # save in params
         self.params["direction_value"] = slider_value
 
-        # change UI slider value to 0.0 - 1.0 range
-        s = max(-100, min(100, slider_value)) / 100.0
+        # update controller user prop for uUI feedback
+        if self.controller and rt.isValidNode(self.controller):
+            rt.setUserProp(self.controller, "ScatterDirection", str(slider_value))
 
-        # Define up vectors
-        Z_UP = rt.point3(0, 0, 1)
-        NEG_Z_UP = -Z_UP
+        # slider normalized
+        s = max(-1.0, min(1.0, slider_value / 100.0))
 
-        # check if there are instances to update
+        Z_UP = rt.point3(0,0,1)
+        NEG_Z_UP = rt.point3(0,0,-1)
+
         if not hasattr(self, "instances") or not self.instances:
             print("DEBUG: No instances to update orientation.")
             return
 
-        # loop through instances and update orientation
-
         for idx, inst_data in enumerate(self.instances):
-            inst = inst_data.node if hasattr(inst_data, "node") else inst_data.get("node")
-            face_normal = inst_data.normal if hasattr(inst_data, "normal") else inst_data.get("normal")
+
+            inst = inst_data.node if hasattr(inst_data,"node") else inst_data.get("node")
+            face_normal = inst_data.normal if hasattr(inst_data,"normal") else inst_data.get("normal")
 
             if not rt.isValidNode(inst):
                 print(f"DEBUG: Instance {idx} is not valid.")
                 continue
 
-            n = rt.normalize(face_normal) if face_normal else rt.point3(0, 0, 1)
-            print(f"DEBUG: Instance {idx} original normal: {face_normal}, normalized: {n}")
+            # if stored normal is not valid, recompute from surface
+            if face_normal == rt.point3(0,0,1) and hasattr(self,"surface") and rt.isValidNode(self.surface):
+                ray_origin = inst.position + rt.point3(0,0,100)
+                ray_dir = rt.point3(0,0,-1)
+                hit = rt.intersectRay(self.surface, rt.ray(ray_origin, ray_dir))
+                if hit:
+                    face_normal = rt.normalize(hit.dir * -1)
 
-            # get new z_axis based on slider value
-            s = max(-1.0, min(1.0, slider_value / 100.0))
+            n = rt.normalize(face_normal) if face_normal else Z_UP
+            # Ensure normal is facing upwards for consistent blending
+            if rt.dot(n, Z_UP) < 0:
+                n = -n
+
             if s >= 0:
+                target = Z_UP
                 alpha = s
-                z_axis = rt.normalize((n * (1 - alpha)) + (rt.point3(0, 0, 1) * alpha))
             else:
+                target = NEG_Z_UP
                 alpha = -s
-                z_axis = rt.normalize((n * (1 - alpha)) + (rt.point3(0, 0, -1) * alpha))
-            print(f"DEBUG: Instance {idx} z_axis after slider adjustment: {z_axis}")
 
-            # build local coordinate system
-            up_ref = rt.point3(0, 1, 0)
-            if abs(rt.dot(z_axis, up_ref)) > 0.99:
-                up_ref = rt.point3(1, 0, 0)
-            x_axis = rt.normalize(rt.cross(up_ref, z_axis))
-            y_axis = rt.normalize(rt.cross(z_axis, x_axis))
+            # Blend between original normal and target direction based on slider value
+            z_axis = rt.normalize((n * (1 - alpha)) + (target * alpha))
+
+
+            dot_val = rt.dot(n, z_axis)
+
+            if dot_val < 0:
+                print("WARNING: axis flipped (negative dot)")
+
+            # preserve current transform
+            tm = inst.transform
             pos = inst.position
-            inst.transform = rt.matrix3(x_axis, y_axis, z_axis, pos)
-    
+
+            # build orthogonal axes
+            up_ref = rt.point3(0,1,0)
+            if abs(rt.dot(z_axis, up_ref)) > 0.99:
+                up_ref = rt.point3(1,0,0)
+
+            x_axis = rt.normalize(rt.cross(z_axis, up_ref))
+            y_axis = rt.normalize(rt.cross(x_axis, z_axis))
+
+            # update transform rows (preserves scale better than rebuilding)
+            tm.row1 = x_axis
+            tm.row2 = y_axis
+            tm.row3 = z_axis
+            tm.row4 = pos
+
+            inst.transform = tm
+
 #manage multiple scatter groups
 
 class ScatterTool:
@@ -569,23 +582,33 @@ class ScatterTool:
                 group_name = rt.getUserProp(obj, "ScatterGroup") 
                 if group_name:# Check if user property exists
                     # Check if group already loaded
-                    g = ScatterGroup.__new__(ScatterGroup)  # crea instancia vacía
+                    g = ScatterGroup.__new__(ScatterGroup) # Create instance without calling __init__
                     g.name = group_name
                     g.target = None
                     g.controller = obj
                     g.layer = rt.LayerManager.getLayerFromName(group_name)
+                    g.surface = None
+                    g.spline = None
+                    g.painter = None
                     g.instances = []
                     g.manager = ElementsManager()
+                    direction_val = rt.getUserProp(obj, "ScatterDirection")
                     g.params = {
                     "count": None,
                     "distance": None,
+
                     "pos_jitter": rt.point3(0,0,0),
+
                     "scale_rangeX": (1.0,1.0),
                     "scale_rangeY": (1.0,1.0),
                     "scale_rangeZ": (1.0,1.0),
+
                     "rot_x_range": (0,0),
                     "rot_y_range": (0,0),
                     "rot_z_range": (0,0),
+
+                    "direction_value": int(direction_val) if direction_val else 0,
+
                     "proportional_scale": rt.getUserProp(obj,"ScatterProportionalScale")=="True",
                     "random": rt.getUserProp(obj,"ScatterRandom")=="True",
                     "viewport_percentage": int(rt.getUserProp(obj,"ScatterViewportDisplay") or 100)
@@ -707,7 +730,7 @@ class ScatterTool:
         hue_range = (hue_var / 100) * hue_max
         sat_range = (sat_var / 100) * sat_max
         bri_range = (val_var / 100) * bri_max
- 
+
         #process each material group
         for base_material,mat_children in material_groups.items():
 

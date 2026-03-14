@@ -8,19 +8,62 @@
 ## WARNING! All changes made in this file will be lost when recompiling UI file!
 ################################################################################
 
-from PySide2.QtCore import (QCoreApplication, QDate, QDateTime, QLocale,
-    QMetaObject, QObject, QPoint, QRect,
-    QSize, QTime, QUrl, Qt)
-from PySide2.QtGui import (QBrush, QColor, QConicalGradient, QCursor,
-    QFont, QFontDatabase, QGradient, QIcon,
-    QImage, QKeySequence, QLinearGradient, QPainter,
-    QPalette, QPixmap, QRadialGradient, QTransform)
-from PySide2.QtWidgets import (QAbstractScrollArea, QAbstractSpinBox, QApplication, QCheckBox,
-    QFrame, QGridLayout, QGroupBox, QHBoxLayout,
-    QLabel, QLayout, QListView, QMainWindow,
-    QPushButton, QRadioButton, QScrollArea, QScrollBar,
-    QSizePolicy, QSlider, QSpacerItem, QSpinBox,
-    QStatusBar, QToolButton, QVBoxLayout, QWidget)
+# --------------------------------------------
+# Qt binding compatibility (3ds Max safe)
+# --------------------------------------------
+# ============================================================
+# 3ds Max Qt compatibility layer (2021 → 2025)
+# ============================================================
+
+
+try:
+    # ---------- 3ds Max 2025+ (Qt6 / PySide6) ----------
+    from PySide6.QtCore import (
+        Qt, QCoreApplication, QDate, QDateTime, QLocale,
+        QMetaObject, QObject, QPoint, QRect,
+        QSize, QTime, QUrl
+    )
+    from PySide6.QtGui import (
+        QBrush, QColor, QConicalGradient, QCursor,
+        QFont, QFontDatabase, QGradient, QIcon,
+        QImage, QKeySequence, QLinearGradient, QPainter,
+        QPalette, QPixmap, QRadialGradient, QTransform
+    )
+    from PySide6.QtWidgets import (
+        QApplication, QAbstractScrollArea, QAbstractSpinBox,
+        QCheckBox, QFrame, QGridLayout, QGroupBox, QHBoxLayout,
+        QLabel, QLayout, QListView, QMainWindow,
+        QPushButton, QRadioButton, QScrollArea, QScrollBar,
+        QSizePolicy, QSlider, QSpacerItem, QSpinBox,
+        QStatusBar, QToolButton, QVBoxLayout, QWidget
+    )
+
+    PYSIDE_VERSION = 6
+
+except ImportError:
+    # ---------- 3ds Max 2021–2024 (Qt5 / PySide2) ----------
+    from PySide2.QtCore import (
+        Qt, QCoreApplication, QDate, QDateTime, QLocale,
+        QMetaObject, QObject, QPoint, QRect,
+        QSize, QTime, QUrl
+    )
+    from PySide2.QtGui import (
+        QBrush, QColor, QConicalGradient, QCursor,
+        QFont, QFontDatabase, QGradient, QIcon,
+        QImage, QKeySequence, QLinearGradient, QPainter,
+        QPalette, QPixmap, QRadialGradient, QTransform
+    )
+    from PySide2.QtWidgets import (
+        QApplication, QAbstractScrollArea, QAbstractSpinBox,
+        QCheckBox, QFrame, QGridLayout, QGroupBox, QHBoxLayout,
+        QLabel, QLayout, QListView, QMainWindow,
+        QPushButton, QRadioButton, QScrollArea, QScrollBar,
+        QSizePolicy, QSlider, QSpacerItem, QSpinBox,
+        QStatusBar, QToolButton, QVBoxLayout, QWidget
+    )
+
+    PYSIDE_VERSION = 2
+
 
 class Ui_ScatterToolUI(object):
     def setupUi(self, ScatterToolUI):
