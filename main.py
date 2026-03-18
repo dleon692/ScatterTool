@@ -117,6 +117,8 @@ class ScatterToolApp(QtWidgets.QMainWindow):
         self.scatter_tool = ScatterTool()
 
         self.current_group = None
+        
+        self.block_selection_callback=False  # Flag to prevent recursive selection callback calls
 
         #Default view mode
         self.ui.button_box.setChecked(False) 
@@ -494,17 +496,18 @@ class ScatterToolApp(QtWidgets.QMainWindow):
 
     def on_selection_changed(self):
 
+        if getattr(self, "block_selection_callback", False):
+            print("DEBUG: Selection callback is currently blocked, skipping.")
+            return
+
         """Automatically load group parameters if a group's dummy is selected."""
         sel = list(rt.selection)
         if not sel: 
-            self.current_group = None
             return
         obj = sel[0]
         group = self.scatter_tool.get_group_by_controller(obj)
 
         if not group:
-            
-            self.current_group = None
             return
 
         self.current_group = group
@@ -838,16 +841,23 @@ class ScatterToolApp(QtWidgets.QMainWindow):
     # --------------------------- Elements list management ---------------------------
 
     def on_add(self):
+        self.block_selection_callback = True
+
         picked_obj = rt.selection[0] if rt.selection.count > 0 else None
         if picked_obj:
             self.manager.add(picked_obj)
             self.refresh_listview()
+
             if self.current_group and rt.isValidNode(self.current_group.controller):
                 elements_names = [o.name for o in self.manager.get_all() if rt.isValidNode(o)]
                 rt.setUserProp(self.current_group.controller, "ScatterElements", ",".join(elements_names))
+                
                 print(f"DEBUG: Updated ScatterElements userProp: {picked_obj}")
-
+        self.block_selection_callback = False
+        
     def on_delete(self):
+        self.block_selection_callback = True
+
         selected_indexes = self.ui.ListElements.selectedIndexes()
         if selected_indexes:
             selected_name = selected_indexes[0].data()
@@ -860,30 +870,45 @@ class ScatterToolApp(QtWidgets.QMainWindow):
                     rt.setUserProp(self.current_group.controller, "ScatterElements", ",".join(elements_names))
                     print(f"DEBUG: Updated ScatterElements userProp: {obj_to_remove.name} was removed.")
 
+        self.block_selection_callback = False
+
     def on_replace(self):
+
+        self.block_selection_callback = True 
+
         selected_indexes = self.ui.ListElements.selectedIndexes()
         picked_obj = rt.selection[0] if rt.selection.count > 0 else None
+
         if selected_indexes and picked_obj:
             selected_name = selected_indexes[0].data()
             old_obj = next((obj for obj in self.manager.get_all() if obj.name == selected_name), None)
+
             if old_obj:
                 self.manager.replace(old_obj, picked_obj)
                 self.refresh_listview()
+
                 if self.current_group and rt.isValidNode(self.current_group.controller):
                     elements_names = [o.name for o in self.manager.get_all() if rt.isValidNode(o)]
                     rt.setUserProp(self.current_group.controller, "ScatterElements", ",".join(elements_names))
                     print(f"DEBUG: Updated ScatterElements userProp: {old_obj.name} was replaced by {picked_obj.name}  .")
 
+        self.block_selection_callback = False 
+
     def on_add_list(self):
+        self.block_selection_callback = True 
+
         selected_objs = list(rt.selection)
+
         if selected_objs:
             self.manager.add_many(selected_objs)
             self.refresh_listview()
+
             if self.current_group and rt.isValidNode(self.current_group.controller):
                 elements_names = [o.name for o in self.manager.get_all() if rt.isValidNode(o)]
                 rt.setUserProp(self.current_group.controller, "ScatterElements", ",".join(elements_names))
                 added_names = [o.name for o in selected_objs]
                 print(f"DEBUG: Updated ScatterElements userProp: the {added_names} were added.")
+        self.block_selection_callback = False 
     # --------------------------- Randomization ---------------------------
 
     def on_shuffle_clicked(self):

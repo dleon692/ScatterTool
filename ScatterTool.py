@@ -750,18 +750,15 @@ class ScatterTool:
                 print(f"❌ No color map slot found in material '{sub_material.name}'. Skipping variation.")
                 continue
 
-            if prev_map is None:
-                pass
-
+            original_map=prev_map
+            if prev_map and rt.classOf(prev_map) == rt.ColorCorrection:
+                #if color correction, get the original map inside
+                if hasattr(prev_map, "map") and prev_map.map:
+                    original_map = prev_map.map
+                elif hasattr(prev_map, "inputMap") and prev_map.inputMap:
+                    original_map = prev_map.inputMap
             else:
-                if rt.classOf(prev_map) == rt.ColorCorrection:
-                    #if color correction, get the original map inside
-                    if hasattr(prev_map, "map") and prev_map.map:
-                        original_map = prev_map.map
-                    elif hasattr(prev_map, "inputMap") and prev_map.inputMap:
-                        original_map = prev_map.inputMap
-                else:
-                    original_map = prev_map
+                original_map = prev_map
 
             #create variation
             variations = []
@@ -771,23 +768,46 @@ class ScatterTool:
                 mat_copy=rt.copy(sub_material)
 
                 #create a new color correction map
-                cc=rt.ColorCorrection()
+                if rt.classOf(rt.renderers.current) == rt.Arnold:
+                    cc = rt.ai_color_correct()
+                    print(f"original map for Arnold color correction: {original_map.name if original_map else 'None'}")
+                    cc.input_shader = original_map
+                    cc.input_connected= original_map
+                    cc.input = original_map
+                    print(f"DEBUG: original map assigned to Arnold color correction: {original_map.name if original_map else 'None'}")
+                else:
+                    cc=rt.ColorCorrection()
+                    if original_map:
+                        if hasattr(cc, "inputMap"):
+                            cc.inputMap = original_map
+                        elif hasattr(cc, "map"):
+                            cc.map = original_map
 
-                #assign existing map to new color correction
-                if original_map != None:
-                    if hasattr(cc, "map"):
-                        cc.map = original_map
-                    elif hasattr(cc, "inputMap"):
-                        cc.inputMap = original_map
+                    #assign existing map to new color correction
+                    if original_map != None:
+                        if hasattr(cc, "map"):
+                            cc.map = original_map
+                        elif hasattr(cc, "inputMap"):
+                            cc.inputMap = original_map
 
                 #assign color correction to the material
                 if slot_name:
                     setattr(mat_copy, slot_name, cc)
 
-                #apply random variation
-                cc.hueShift = random.uniform(-hue_range, hue_range)
-                cc.saturation = random.uniform(-sat_range, sat_range)
-                cc.brightness = random.uniform(-bri_range, bri_range)
+                # apply random variation
+                hue_val = random.uniform(-hue_range, hue_range)
+                sat_val = random.uniform(-sat_range, sat_range)
+                bri_val = random.uniform(-bri_range, bri_range)
+                gamma_val =random.uniform(-bri_range/10.0, bri_range/10.0) 
+
+                if rt.classOf(cc) == rt.ai_color_correct:
+                    cc.hueShift = hue_val
+                    cc.saturation = sat_val
+                    cc.gamma =gamma_val
+                else:
+                    cc.hue = hue_val
+                    cc.saturation = sat_val
+                    cc.brightness = bri_val
 
                 variations.append(mat_copy)
     
@@ -868,14 +888,11 @@ class ScatterTool:
             "base_color_shader",# Arnold
             "texmap_diffuse",   # Corona
         ]
-
         for slot in slot_priority:
             if hasattr(mat, slot):
-                return slot, getattr(mat, slot)
+                tex=getattr(mat, slot)
+                
+                if tex is not None:
+                    return slot, tex
 
         return None, None
-
-
-
-
-    
