@@ -530,22 +530,15 @@ class ScatterGroup:
             # Ensure normal is facing upwards for consistent blending
             if rt.dot(n, Z_UP) < 0:
                 n = -n
+            # Blend between normal and world up based on slider
+            alpha = abs(s)
+            target = Z_UP
 
-            if s >= 0:
-                target = Z_UP
-                alpha = s
-            else:
-                target = NEG_Z_UP
-                alpha = -s
-
-            # Blend between original normal and target direction based on slider value
             z_axis = rt.normalize((n * (1 - alpha)) + (target * alpha))
 
+            if s < 0:
+                z_axis = -z_axis    
 
-            dot_val = rt.dot(n, z_axis)
-
-            if dot_val < 0:
-                print("WARNING: axis flipped (negative dot)")
 
             # preserve current transform
             tm = inst.transform
@@ -801,7 +794,25 @@ class ScatterTool:
 
             #assign variation to each child
             for child in mat_children:
-                child.material = random.choice(variations)
+                chosen_submat = random.choice(variations)
+
+                if rt.classOf(base_material) == rt.Multimaterial:
+
+                    #create a new multimaterial instance for the child
+                    multi_copy = rt.multimaterial(numsubs=base_material.numsubs)
+
+                    #assign original submaterials to the new multimaterial
+                    for i in range(base_material.numsubs):
+                        if i == submat_id-1:
+                            #ID with variation
+                            multi_copy.materialList[i] = chosen_submat
+                        else:
+                            #iD without variation, assign original
+                            multi_copy.materialList[i] = base_material.materialList[i]
+
+                    child.material = multi_copy
+                else:
+                    child.material = chosen_submat
                 rt.setUserProp(child, "SCATTER_VARIATION", True)
                 rt.setUserProp(child, "SCATTER_SOURCE_MATERIAL", base_material)
                 rt.setUserProp(child, "SCATTER_SUB_ID", submat_id)
@@ -853,7 +864,8 @@ class ScatterTool:
         slot_priority = [
             "base_color_map",   # Physical Material
             "diffuseMap",       # VRay / Standard
-            "base_color",       # Arnold
+            "base_shader",# Arnold
+            "base_color_shader",# Arnold
             "texmap_diffuse",   # Corona
         ]
 

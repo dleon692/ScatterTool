@@ -633,8 +633,8 @@ class Ui_ScatterToolUI(object):
         self.spinBox_hueVar.setFrame(True)
         self.spinBox_hueVar.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.UpDownArrows)
         self.spinBox_hueVar.setProperty(u"showGroupSeparator", False)
-        self.spinBox_hueVar.setMinimum(-180)
-        self.spinBox_hueVar.setMaximum(0)
+        self.spinBox_hueVar.setMinimum(0)
+        self.spinBox_hueVar.setMaximum(100)
 
         self.gridLayout_6.addWidget(self.spinBox_hueVar, 2, 2, 1, 1)
 
@@ -645,15 +645,15 @@ class Ui_ScatterToolUI(object):
 
         self.spinBox_satVar = QSpinBox(self.groupBox_colorvar)
         self.spinBox_satVar.setObjectName(u"spinBox_satVar")
-        self.spinBox_satVar.setMinimum(-100)
-        self.spinBox_satVar.setMaximum(0)
+        self.spinBox_satVar.setMinimum(0)
+        self.spinBox_satVar.setMaximum(100)
 
         self.gridLayout_6.addWidget(self.spinBox_satVar, 3, 2, 1, 1)
 
         self.spinBox_briVar = QSpinBox(self.groupBox_colorvar)
         self.spinBox_briVar.setObjectName(u"spinBox_briVar")
-        self.spinBox_briVar.setMinimum(-100)
-        self.spinBox_briVar.setMaximum(0)
+        self.spinBox_briVar.setMinimum(0)
+        self.spinBox_briVar.setMaximum(100)
 
         self.gridLayout_6.addWidget(self.spinBox_briVar, 4, 2, 1, 1)
 
